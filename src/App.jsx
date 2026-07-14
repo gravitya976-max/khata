@@ -5,6 +5,7 @@ import People from './screens/People'
 import Share from './screens/Share'
 import Settings from './screens/Settings'
 import { listenForUpdates, applyUpdate, getLocalVersion } from './updater'
+import { tryCloudRestore } from './db'
 
 const TABS = [
   { id: 'home', label: 'Home', icon: 'fa-house' },
@@ -24,6 +25,15 @@ export default function App() {
   // Listen for service worker update events
   useEffect(() => {
     listenForUpdates((info) => setUpdateInfo(info))
+  }, [])
+
+  // Try cloud restore on startup (if local data was cleared)
+  useEffect(() => {
+    tryCloudRestore().then((restored) => {
+      if (restored) {
+        setScreenKey((k) => k + 1) // Re-render to show restored data
+      }
+    })
   }, [])
 
   const handleUpdate = () => {

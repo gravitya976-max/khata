@@ -3,7 +3,7 @@
 // fetching new assets. This module listens for SW update events
 // and shows a reload prompt.
 
-const LOCAL_VERSION = '1.1.0'
+const LOCAL_VERSION = '1.2.0'
 
 export function getLocalVersion() {
   return LOCAL_VERSION

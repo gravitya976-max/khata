@@ -1,11 +1,20 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { exportAllData, importAllData, clearAllData } from '../db'
+import { getCloudStatus } from '../firebase'
 
-const APP_VERSION = '1.1.0'
+const APP_VERSION = '1.2.0'
 
 export default function Settings() {
   const [toast, setToast] = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [cloudStatus, setCloudStatus] = useState({ configured: false, status: 'Checking...' })
+
+  useEffect(() => {
+    const check = () => setCloudStatus(getCloudStatus())
+    check()
+    const interval = setInterval(check, 3000)
+    return () => clearInterval(interval)
+  }, [])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -75,6 +84,48 @@ export default function Settings() {
         </div>
       </div>
 
+      {/* Cloud Database */}
+      <div className="settings-group">
+        <div className="settings-group-title">Cloud Database</div>
+        <div className="settings-item">
+          <i className={`fa-solid ${cloudStatus.configured ? 'fa-cloud-arrow-up' : 'fa-cloud-xmark'}`}
+             style={{color: cloudStatus.configured ? 'var(--primary)' : 'var(--text-muted)'}}></i>
+          <span className="settings-label">Cloud Sync</span>
+          <span className="settings-value" style={{
+            color: cloudStatus.status === 'Connected' ? 'var(--primary)' :
+                   cloudStatus.status === 'Not configured' ? 'var(--danger)' : 'var(--text-muted)'
+          }}>
+            {cloudStatus.status}
+          </span>
+        </div>
+        <div className="settings-item" style={{flexDirection:'column',alignItems:'flex-start',gap:6}}>
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <i className="fa-solid fa-circle-info" style={{color:'var(--primary)'}}></i>
+            <span className="settings-label" style={{fontWeight:700}}>About Cloud Storage</span>
+          </div>
+          <div style={{fontSize:12,color:'var(--text-secondary)',lineHeight:1.6,paddingLeft:28}}>
+            <div style={{marginBottom:6}}>
+              <strong>Provider:</strong> Google Firebase (Firestore)
+            </div>
+            <div style={{marginBottom:6}}>
+              <strong>Cost:</strong> Completely FREE. Firebase Spark plan includes 1GB storage and 50,000 reads/day. Khata uses less than 1MB and fewer than 100 reads/day.
+            </div>
+            <div style={{marginBottom:6}}>
+              <strong>Reliable:</strong> Firebase is owned and operated by Google. 99.95% uptime SLA. Same infrastructure used by apps with millions of users.
+            </div>
+            <div style={{marginBottom:6}}>
+              <strong>Long-term:</strong> Firebase has been running since 2012 (14+ years). Google has invested billions in it. Your data is stored in Google Cloud data centers with automatic backups.
+            </div>
+            <div style={{marginBottom:6}}>
+              <strong>Privacy:</strong> Data is tied to an anonymous device ID. No personal info is shared. Only you can access your data.
+            </div>
+            <div>
+              <strong>Recovery:</strong> If you clear app data or switch phones, your collections restore automatically from the cloud on next app open.
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Data Management */}
       <div className="settings-group">
         <div className="settings-group-title">Data Management</div>
@@ -95,22 +146,13 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* About */}
-      <div className="settings-group">
-        <div className="settings-group-title">About</div>
-        <div className="settings-item">
-          <i className="fa-solid fa-circle-info"></i>
-          <span className="settings-label">Khata is a lightweight daily collection tracker that works offline. All data stays on your device.</span>
-        </div>
-      </div>
-
       {/* Clear Confirmation */}
       {showClearConfirm && (
         <div className="modal-overlay" onClick={() => setShowClearConfirm(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>Clear All Data</h3>
             <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 14 }}>
-              This will permanently delete all people and collection records. Download a backup first if needed. This cannot be undone.
+              This will permanently delete all people and collection records from this device AND the cloud. Download a backup first if needed. This cannot be undone.
             </p>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setShowClearConfirm(false)}>

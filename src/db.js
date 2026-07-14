@@ -1,10 +1,23 @@
 // db.js — IndexedDB wrapper for Khata
 // ponytail: raw IndexedDB, no idb library. It's 1 file.
+// Cloud sync: mirrors writes to Firebase Firestore in background
+
+import {
+  syncPeopleToCloud,
+  syncCollectionToCloud,
+  deletePersonFromCloud,
+  restoreFromCloud,
+  clearCloudData,
+  initFirebase
+} from './firebase'
 
 const DB_NAME = 'khata-db';
 const DB_VERSION = 1;
 
 let dbInstance = null;
+
+// Init Firebase on module load
+initFirebase()
 
 function openDB() {
   if (dbInstance) return Promise.resolve(dbInstance);
@@ -88,11 +101,23 @@ export async function getAllPeople() {
 export async function addPerson(name, mobile = '') {
   const people = await getAllPeople();
   const order = people.length;
-  return put('people', { name, mobile, order, createdAt: Date.now() });
+  const id = await put('people', { name, mobile, order, createdAt: Date.now() });
+
+  // Cloud sync (background)
+  const allPeople = await getAllPeople();
+  syncPeopleToCloud(allPeople)
+
+  return id;
 }
 
 export async function updatePerson(person) {
-  return put('people', person);
+  const result = await put('people', person);
+
+  // Cloud sync (background)
+  const allPeople = await getAllPeople();
+  syncPeopleToCloud(allPeople)
+
+  return result;
 }
 
 export async function deletePerson(id) {
@@ -105,7 +130,7 @@ export async function deletePerson(id) {
 
   peopleStore.delete(id);
 
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
     const req = idx.openCursor(IDBKeyRange.only(id));
     req.onsuccess = (e) => {
       const cursor = e.target.result;
@@ -117,6 +142,11 @@ export async function deletePerson(id) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+
+  // Cloud sync (background)
+  deletePersonFromCloud(id)
+
+  return result;
 }
 
 // Collections
@@ -170,7 +200,7 @@ export async function getCollectionsByMonth(year, month) {
 
 export async function saveCollection(personId, date, amount) {
   const db = await openDB();
-  return new Promise((resolve, reject) => {
+  const result = await new Promise((resolve, reject) => {
     const tx = db.transaction('collections', 'readwrite');
     const store = tx.objectStore('collections');
     const idx = store.index('personDate');
@@ -189,6 +219,11 @@ export async function saveCollection(personId, date, amount) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+
+  // Cloud sync (background)
+  syncCollectionToCloud(personId, date, amount)
+
+  return result;
 }
 
 // Settings
@@ -229,6 +264,10 @@ export async function importAllData(data) {
 
     tx.oncomplete = () => {
       dbInstance = null; // Reset connection
+
+      // Sync imported data to cloud
+      syncPeopleToCloud(data.people || [])
+
       resolve();
     };
     tx.onerror = () => reject(tx.error);
@@ -242,7 +281,24 @@ export async function clearAllData() {
     tx.objectStore('people').clear();
     tx.objectStore('collections').clear();
     tx.objectStore('settings').clear();
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      // Also clear cloud data
+      clearCloudData()
+      resolve();
+    };
     tx.onerror = () => reject(tx.error);
   });
+}
+
+// Cloud recovery — called on app start
+export async function tryCloudRestore() {
+  const people = await getAll('people');
+  if (people.length > 0) return false // Local data exists, no need to restore
+
+  const cloudData = await restoreFromCloud();
+  if (!cloudData || cloudData.people.length === 0) return false
+
+  // Restore from cloud
+  await importAllData(cloudData)
+  return true // Data was restored
 }
