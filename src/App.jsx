@@ -4,7 +4,7 @@ import Monthly from './screens/Monthly'
 import People from './screens/People'
 import Share from './screens/Share'
 import Settings from './screens/Settings'
-import { checkForUpdate, applyUpdate, getLocalVersion } from './updater'
+import { listenForUpdates, applyUpdate, getLocalVersion } from './updater'
 
 const TABS = [
   { id: 'home', label: 'Home', icon: 'fa-house' },
@@ -21,20 +21,14 @@ export default function App() {
   const [updateInfo, setUpdateInfo] = useState(null)
   const [updating, setUpdating] = useState(false)
 
-  // Check for update on app launch
+  // Listen for service worker update events
   useEffect(() => {
-    const check = async () => {
-      const update = await checkForUpdate()
-      if (update) setUpdateInfo(update)
-    }
-    // Delay check by 2s so the UI loads first
-    const timer = setTimeout(check, 2000)
-    return () => clearTimeout(timer)
+    listenForUpdates((info) => setUpdateInfo(info))
   }, [])
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     setUpdating(true)
-    await applyUpdate(updateInfo)
+    applyUpdate()
   }
 
   const switchTab = (id) => {
