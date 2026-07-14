@@ -7,7 +7,7 @@ const LOCAL_VERSION = '1.1.0'
 // CHANGE THIS to your GitHub Pages URL or raw GitHub content URL
 // Example: 'https://YOUR_USERNAME.github.io/khata'
 // For now, set to null (disabled) until you push to GitHub
-const UPDATE_BASE_URL = null
+const UPDATE_BASE_URL = 'https://gravitya976-max.github.io/khata'
 
 export function getLocalVersion() {
   return LOCAL_VERSION
