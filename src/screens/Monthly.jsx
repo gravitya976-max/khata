@@ -103,7 +103,7 @@ export default function Monthly({ initialPersonId }) {
   }
 
   // Determine cell class based on past/future + paid/due
-  const getCellClass = (day, dayOfWeekIdx) => {
+  const getCellClass = (day, _dayOfWeekIdx) => {
     if (day === null) return 'empty'
 
     const dateStr = formatDateStr(day)

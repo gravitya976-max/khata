@@ -1,4 +1,5 @@
 /* Khata — Global Styles & Design Tokens */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
 :root {
   --primary: #2ECC71;
@@ -21,6 +22,11 @@
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-full: 50%;
+
+  /* Fonts */
+  --font-heading: 'Poppins', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-number: 'JetBrains Mono', 'Courier New', monospace;
 }
 
 * {
@@ -39,12 +45,46 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-body);
   background: var(--bg);
   color: var(--text-primary);
   font-size: 14px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Font assignments */
+h1, h2, h3, h4,
+.app-header h1,
+.share-toggle button,
+.share-month-name,
+.settings-group-title,
+.date-detail-names-title,
+.date-detail-date,
+.date-detail-total-label,
+.preview-col-header,
+.share-prev-name,
+.month-label,
+.person-select,
+.date-nav-day {
+  font-family: var(--font-heading);
+}
+
+/* Numbers: amounts, totals, dates */
+.share-month-amount,
+.share-cal-amount,
+.share-prev-total,
+.date-detail-total-value,
+.date-detail-person-amount,
+.preview-col-total,
+.preview-col-row span:last-child,
+.collection-amount,
+.collection-input,
+.total-amount,
+.summary-total,
+.settings-value,
+.app-header .version {
+  font-family: var(--font-number);
 }
 
 /* App Shell */
@@ -444,6 +484,8 @@ body {
 
 /* Bottom Navigation */
 .bottom-nav {
+  position: relative;
+  z-index: 300;
   display: flex;
   background: var(--nav-bg);
   border-top: 1px solid #F0F0F0;
@@ -995,6 +1037,66 @@ body {
   color: var(--text-primary);
 }
 
+.person-select {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-white);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.person-dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg-white);
+  border: 1.5px solid var(--primary-border);
+  border-radius: var(--radius-md);
+  margin-top: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  box-shadow: var(--shadow-md);
+}
+
+.person-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s;
+}
+
+.person-dropdown-item:last-child {
+  border-bottom: none;
+}
+
+.person-dropdown-item:active,
+.person-dropdown-item.active {
+  background: var(--primary-light);
+}
+
+.person-select:focus {
+  outline: none;
+  border-color: var(--primary-dark);
+  box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.2);
+}
+
 .preview-box {
   margin: 12px 16px;
   padding: 16px;
@@ -1110,6 +1212,362 @@ body {
 .share-btn:active {
   background: var(--primary-dark);
   transform: scale(0.98);
+}
+
+/* ──── Share: Whole Month Header Card ──── */
+.share-month-header {
+  margin: 8px 16px;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #FDF2F8 0%, #FCE7F3 50%, #F3E8FF 100%);
+  border: 1.5px solid #F9A8D4;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.share-month-info {
+  flex: 1;
+}
+
+.share-month-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.share-month-total {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--primary-dark);
+  font-weight: 800;
+}
+
+.share-month-total i {
+  font-size: 16px;
+}
+
+.share-month-amount {
+  font-size: 18px;
+}
+
+.share-month-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--primary-dark);
+  cursor: pointer;
+  padding: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.share-month-btn i {
+  font-size: 20px;
+}
+
+.share-month-btn:active {
+  transform: scale(0.9);
+}
+
+/* ──── Share: Calendar Grid ──── */
+.share-calendar {
+  display: grid;
+  gap: 6px;
+  padding: 4px 12px;
+  margin-bottom: 12px;
+}
+
+.share-cal-cell {
+  padding: 8px 6px;
+  border-radius: 8px;
+  border: 1.5px dashed var(--primary-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 56px;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.share-cal-cell:active {
+  transform: scale(0.95);
+  box-shadow: 0 2px 8px rgba(46, 204, 113, 0.3);
+}
+
+.share-cal-cell.collected {
+  background: #D1FAE5;
+  border-color: #A7F3D0;
+}
+
+.share-cal-cell.zero {
+  background: #FCE7F3;
+  border-color: #F9A8D4;
+}
+
+.share-cal-cell.prev-month {
+  background: #F0FDF4;
+  border-color: #D5F5E3;
+  opacity: 0.5;
+  cursor: default;
+}
+
+.share-cal-cell.prev-month:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.share-cal-cell.empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.share-cal-cell.empty:active {
+  transform: none;
+  box-shadow: none;
+}
+
+.share-cal-day {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.share-cal-cell.prev-month .share-cal-day {
+  color: var(--text-muted);
+}
+
+.share-cal-amount {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--primary-dark);
+}
+
+.share-cal-cell.zero .share-cal-amount {
+  color: var(--danger);
+}
+
+/* ──── Share: Previous Months ──── */
+.share-prev-months {
+  padding: 0 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-prev-month-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #FCE7F3 0%, #FDF2F8 100%);
+  border: 1.5px solid #F9A8D4;
+  border-radius: var(--radius-md);
+}
+
+.share-prev-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.share-prev-total {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--primary-dark);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ──── Date Detail Modal ──── */
+.date-detail-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 56px;
+  background: var(--bg-white);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.25s ease-out;
+  max-width: 480px;
+  margin: 0 auto;
+  overflow-y: auto;
+}
+
+.date-detail-header {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, #1A8B4E 100%);
+  color: white;
+  padding: 14px 16px;
+  border-radius: 0 0 16px 16px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  min-height: 72px;
+}
+
+.date-detail-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.date-detail-close {
+  position: static;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+}
+
+.date-detail-icon {
+  font-size: 22px;
+  display: flex;
+  align-items: center;
+}
+
+.date-detail-date {
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.date-detail-total-section {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.date-detail-total-label {
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.85;
+  letter-spacing: 0.5px;
+}
+
+.date-detail-total-value {
+  font-size: 22px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.date-detail-total-value i {
+  font-size: 18px;
+}
+
+/* Names header with share button */
+.date-detail-names-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 8px;
+}
+
+.date-detail-names-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.date-detail-share-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.date-detail-share-btn:active {
+  transform: scale(0.95);
+  background: var(--primary-dark);
+}
+
+/* Person list */
+.date-detail-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 16px 16px;
+}
+
+.date-detail-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--primary-border);
+  background: var(--primary-light);
+  transition: transform 0.1s;
+}
+
+.date-detail-person:active {
+  transform: scale(0.98);
+}
+
+.date-detail-person.due {
+  border-color: var(--danger-border);
+  background: var(--danger-light);
+}
+
+.date-detail-person-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-detail-person-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.date-detail-person-mobile {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+.date-detail-person-amount {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--primary-dark);
+  min-width: 60px;
+  justify-content: flex-end;
+}
+
+.date-detail-person.due .date-detail-person-amount {
+  color: var(--danger);
 }
 
 /* Settings Screen */
@@ -1264,4 +1722,170 @@ body {
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-secondary);
+}
+
+/* ──── Sync Status Bar ──── */
+.sync-status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.sync-status-bar i:first-child {
+  font-size: 13px;
+}
+
+.sync-label {
+  flex: 1;
+}
+
+.sync-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sync-status-bar.status-synced {
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.sync-status-bar.status-syncing {
+  background: #EBF5FB;
+  color: #2980B9;
+}
+
+.sync-status-bar.status-offline {
+  background: #F5F5F5;
+  color: var(--text-secondary);
+}
+
+.sync-status-bar.status-error {
+  background: var(--danger-light);
+  color: var(--danger);
+}
+
+.sync-status-bar.status-warning {
+  background: #FEF9E7;
+  color: #F39C12;
+}
+
+.sync-status-bar.status-pending {
+  background: #EBF5FB;
+  color: #2980B9;
+}
+
+/* Sync Detail Popup */
+.sync-detail-popup {
+  margin: 0;
+  padding: 8px 16px;
+  background: #FAFAFA;
+  border-bottom: 1px solid #F0F0F0;
+  animation: slideDown 0.15s ease-out;
+}
+
+.sync-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  font-size: 12px;
+}
+
+.sync-detail-row:not(:last-child) {
+  border-bottom: 1px solid #F0F0F0;
+}
+
+.sync-detail-key {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.sync-detail-val {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sync-detail-val.green {
+  color: var(--primary);
+}
+
+.sync-detail-val.orange {
+  color: #F39C12;
+}
+
+.sync-detail-val.red {
+  color: var(--danger);
+}
+
+.error-row {
+  background: var(--danger-light);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-top: 4px;
+}
+
+/* ──── Update Modal ──── */
+.update-modal {
+  background: var(--bg-white);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  width: 100%;
+  max-width: 340px;
+  box-shadow: var(--shadow-md);
+  animation: slideUp 0.25s ease-out;
+  text-align: center;
+}
+
+.update-modal-icon {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  background: linear-gradient(135deg, #E8F8EF 0%, #D1FAE5 100%);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.update-modal-icon i {
+  font-size: 24px;
+  color: var(--primary-dark);
+}
+
+.update-modal h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.update-modal-version {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.update-modal-changelog {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.update-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.update-install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }

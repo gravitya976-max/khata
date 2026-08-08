@@ -1,15 +1,34 @@
-const CACHE_NAME = 'khata-v1.1.0'
+const CACHE_NAME = 'khata-v1.2.0'
 const ASSETS = [
   '/',
   '/index.html',
 ]
 
-// Install: cache core assets
+// External assets to cache for offline
+const EXTERNAL_ASSETS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css',
+  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2',
+]
+
+// Install: cache core assets + external CDN
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(ASSETS)
+      // Cache external assets (non-blocking failures)
+      for (const url of EXTERNAL_ASSETS) {
+        try { await cache.add(url) } catch {}
+      }
+    })
   )
-  self.skipWaiting()
+  // Don't skip waiting automatically — let the app control when to activate
+})
+
+// Listen for SKIP_WAITING message from the app
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
 })
 
 // Activate: clean old caches and notify clients
@@ -27,12 +46,18 @@ self.addEventListener('activate', (e) => {
   self.clients.claim()
 })
 
-// Fetch: network-first for HTML, cache-first for assets
+// Fetch: network-first for HTML/API, cache-first for assets
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url)
 
   // Skip non-GET requests
   if (e.request.method !== 'GET') return
+
+  // Skip version.json — always fetch fresh (for update checks)
+  if (url.pathname.endsWith('version.json')) {
+    e.respondWith(fetch(e.request))
+    return
+  }
 
   // HTML pages: network first, fallback to cache
   if (e.request.mode === 'navigate' || url.pathname.endsWith('.html')) {
@@ -48,7 +73,7 @@ self.addEventListener('fetch', (e) => {
     return
   }
 
-  // Assets (JS, CSS, images): cache first, update in background
+  // Assets (JS, CSS, images, fonts): cache first, update in background
   e.respondWith(
     caches.match(e.request).then((cached) => {
       const fetchPromise = fetch(e.request).then((res) => {

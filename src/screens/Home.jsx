@@ -7,12 +7,6 @@ function formatDate(d) {
   return d.toISOString().split('T')[0]
 }
 
-function formatDisplayDate(d) {
-  return d.toLocaleDateString('en-IN', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-  })
-}
-
 export default function Home({ onViewPerson }) {
   const [people, setPeople] = useState([])
   const [collections, setCollections] = useState({}) // { personId: amount }

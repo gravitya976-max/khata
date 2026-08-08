@@ -1,20 +1,19 @@
 // Firebase configuration for Khata
-// Cloud sync: mirrors IndexedDB data to Firestore for backup/recovery
+// BACKUP ONLY: Firebase is the last-resort backup storage.
+// Primary sync goes through Turso DB (see turso.js + syncQueue.js).
+// Firebase receives a periodic full JSON dump for disaster recovery.
+
 import { initializeApp } from 'firebase/app'
 import {
   getFirestore,
   doc,
+  getDoc,
   setDoc,
   getDocs,
   collection,
-  writeBatch,
-  deleteDoc,
   enableIndexedDbPersistence
 } from 'firebase/firestore'
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 
-// PASTE YOUR FIREBASE CONFIG HERE after creating a project at:
-// https://console.firebase.google.com
 const firebaseConfig = {
   apiKey: 'AIzaSyA66RxabVxDBB5E3i9-En1w6htzANAXFtk',
   authDomain: 'khata-booo.firebaseapp.com',
@@ -26,9 +25,8 @@ const firebaseConfig = {
 
 let app = null
 let db = null
-let userId = null
+const USER_KEY = 'khata-default'  // Fixed key — all installs share the same backup
 let isReady = false
-let readyCallbacks = []
 
 function isConfigured() {
   return firebaseConfig.apiKey && firebaseConfig.projectId
@@ -37,7 +35,7 @@ function isConfigured() {
 // Initialize Firebase
 export function initFirebase() {
   if (!isConfigured()) {
-    console.log('Firebase not configured — cloud sync disabled')
+    console.log('Firebase not configured — backup disabled')
     return
   }
 
@@ -48,20 +46,8 @@ export function initFirebase() {
     // Enable offline persistence
     enableIndexedDbPersistence(db).catch(() => {})
 
-    // Anonymous auth — no login needed
-    const auth = getAuth(app)
-    signInAnonymously(auth).catch((err) => {
-      console.warn('Firebase auth failed:', err.message)
-    })
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        userId = user.uid
-        isReady = true
-        readyCallbacks.forEach((cb) => cb())
-        readyCallbacks = []
-      }
-    })
+    isReady = true
+    console.log('Firebase ready (fixed key: ' + USER_KEY + ')')
   } catch (err) {
     console.warn('Firebase init failed:', err.message)
   }
@@ -70,70 +56,58 @@ export function initFirebase() {
 function whenReady() {
   return new Promise((resolve) => {
     if (isReady) return resolve()
-    readyCallbacks.push(resolve)
-    // Timeout after 5s
-    setTimeout(resolve, 5000)
+    // Retry for up to 3s
+    let elapsed = 0
+    const interval = setInterval(() => {
+      elapsed += 200
+      if (isReady || elapsed >= 3000) {
+        clearInterval(interval)
+        resolve()
+      }
+    }, 200)
   })
 }
 
-// Cloud sync functions
+// ──── Backup: Push full data dump to Firebase ────
 
-export async function syncPeopleToCloud(people) {
+export async function pushFullBackup(data) {
   if (!isConfigured() || !db) return
   await whenReady()
   try {
-    const batch = writeBatch(db)
-    people.forEach((p) => {
-      const ref = doc(db, `users/${userId}/people`, String(p.id))
-      batch.set(ref, p)
+    await setDoc(doc(db, `users/${USER_KEY}/backups`, 'latest'), {
+      people: JSON.stringify(data.people || []),
+      collections: JSON.stringify(data.collections || []),
+      settings: JSON.stringify(data.settings || []),
+      timestamp: Date.now(),
+      exportedAt: data.exportedAt || new Date().toISOString(),
     })
-    await batch.commit()
+    console.log('Firebase backup pushed')
   } catch (err) {
-    console.warn('Cloud sync (people) failed:', err.message)
+    console.warn('Firebase backup failed:', err.message)
   }
 }
 
-export async function syncCollectionToCloud(personId, date, amount) {
-  if (!isConfigured() || !db) return
-  await whenReady()
-  try {
-    const key = `${personId}_${date}`
-    await setDoc(doc(db, `users/${userId}/collections`, key), {
-      personId,
-      date,
-      amount,
-      timestamp: Date.now()
-    })
-  } catch (err) {
-    console.warn('Cloud sync (collection) failed:', err.message)
-  }
-}
-
-export async function deletePersonFromCloud(id) {
-  if (!isConfigured() || !db) return
-  await whenReady()
-  try {
-    await deleteDoc(doc(db, `users/${userId}/people`, String(id)))
-    // Delete person's collections
-    const snap = await getDocs(collection(db, `users/${userId}/collections`))
-    const batch = writeBatch(db)
-    snap.forEach((d) => {
-      if (d.data().personId === id) batch.delete(d.ref)
-    })
-    await batch.commit()
-  } catch (err) {
-    console.warn('Cloud delete failed:', err.message)
-  }
-}
+// ──── Restore: Pull data from Firebase (last resort) ────
 
 export async function restoreFromCloud() {
   if (!isConfigured() || !db) return null
   await whenReady()
   try {
-    const peopleSnap = await getDocs(collection(db, `users/${userId}/people`))
-    const collectionsSnap = await getDocs(collection(db, `users/${userId}/collections`))
+    // Try the new backup format first
+    const backupDoc = await getDoc(doc(db, `users/${USER_KEY}/backups`, 'latest'))
+    if (backupDoc.exists()) {
+      const d = backupDoc.data()
+      return {
+        people: JSON.parse(d.people || '[]'),
+        collections: JSON.parse(d.collections || '[]'),
+      }
+    }
 
-    if (peopleSnap.empty) return null // No cloud data
+    // Fallback to old format (legacy collections)
+    const peopleSnap = await getDocs(collection(db, `users/${USER_KEY}/people`))
+    const collectionsSnap = await getDocs(collection(db, `users/${USER_KEY}/collections`))
+
+    if (peopleSnap.empty) return null
 
     const people = []
     peopleSnap.forEach((d) => people.push(d.data()))
@@ -143,28 +117,15 @@ export async function restoreFromCloud() {
 
     return { people, collections }
   } catch (err) {
-    console.warn('Cloud restore failed:', err.message)
+    console.warn('Firebase restore failed:', err.message)
     return null
   }
 }
 
-export async function clearCloudData() {
-  if (!isConfigured() || !db) return
-  await whenReady()
-  try {
-    const peopleSnap = await getDocs(collection(db, `users/${userId}/people`))
-    const collectionsSnap = await getDocs(collection(db, `users/${userId}/collections`))
-    const batch = writeBatch(db)
-    peopleSnap.forEach((d) => batch.delete(d.ref))
-    collectionsSnap.forEach((d) => batch.delete(d.ref))
-    await batch.commit()
-  } catch (err) {
-    console.warn('Cloud clear failed:', err.message)
-  }
-}
+// ──── Status ────
 
-export function getCloudStatus() {
+export function getFirebaseStatus() {
   if (!isConfigured()) return { configured: false, status: 'Not configured' }
   if (!isReady) return { configured: true, status: 'Connecting...' }
-  return { configured: true, status: 'Connected', userId }
+  return { configured: true, status: 'Connected' }
 }

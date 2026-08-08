@@ -1,20 +1,62 @@
-import { useState, useEffect } from 'react'
-import { exportAllData, importAllData, clearAllData } from '../db'
-import { getCloudStatus } from '../firebase'
-
-const APP_VERSION = '1.2.0'
+import { useState, useEffect, useCallback } from 'react'
+import { exportAllData, importAllData, clearAllData, getAutoBackups, restoreFromAutoBackup, runAutoBackup } from '../db'
+import { getFirebaseStatus } from '../firebase'
+import { getSyncStatus } from '../syncQueue'
+import { getLocalVersion } from '../updater'
 
 export default function Settings() {
   const [toast, setToast] = useState('')
   const [showClearConfirm, setShowClearConfirm] = useState(false)
-  const [cloudStatus, setCloudStatus] = useState({ configured: false, status: 'Checking...' })
+  const [showBackupList, setShowBackupList] = useState(false)
+  const [autoBackups, setAutoBackups] = useState([])
+  const [syncStatus, setSyncStatus] = useState(getSyncStatus())
+  const [fbStatus, setFbStatus] = useState(getFirebaseStatus())
+  const [isOnline, setIsOnline] = useState(navigator.onLine)
+
+  // Real-time network detection (fetch-based for Android WebView reliability)
+  useEffect(() => {
+    let mounted = true
+    const checkOnline = async () => {
+      try {
+        await fetch('https://www.google.com/generate_204', {
+          method: 'HEAD',
+          mode: 'no-cors',
+          cache: 'no-store',
+        })
+        if (mounted) setIsOnline(true)
+      } catch {
+        if (mounted) setIsOnline(false)
+      }
+    }
+
+    // Check immediately and every 5 seconds
+    checkOnline()
+    const interval = setInterval(checkOnline, 5000)
+
+    // Also listen to native events as a fast path
+    const goOnline = () => { checkOnline() }
+    const goOffline = () => { if (mounted) setIsOnline(false) }
+    window.addEventListener('online', goOnline)
+    window.addEventListener('offline', goOffline)
+
+    return () => {
+      mounted = false
+      clearInterval(interval)
+      window.removeEventListener('online', goOnline)
+      window.removeEventListener('offline', goOffline)
+    }
+  }, [])
+
+  // Periodic sync/firebase status refresh
+  const refreshStatus = useCallback(() => {
+    setSyncStatus(getSyncStatus())
+    setFbStatus(getFirebaseStatus())
+  }, [])
 
   useEffect(() => {
-    const check = () => setCloudStatus(getCloudStatus())
-    check()
-    const interval = setInterval(check, 3000)
+    const interval = setInterval(refreshStatus, 3000)
     return () => clearInterval(interval)
-  }, [])
+  }, [refreshStatus])
 
   const showToast = (msg) => {
     setToast(msg)
@@ -67,6 +109,31 @@ export default function Settings() {
     showToast('All data cleared')
   }
 
+  const handleForceBackup = async () => {
+    const result = await runAutoBackup()
+    showToast(result ? 'Backup saved' : 'Backup already recent')
+  }
+
+  const handleShowAutoBackups = async () => {
+    const backups = await getAutoBackups()
+    setAutoBackups(backups)
+    setShowBackupList(true)
+  }
+
+  const handleRestoreAutoBackup = async (index) => {
+    const success = await restoreFromAutoBackup(index)
+    setShowBackupList(false)
+    showToast(success ? 'Restored from auto-backup. Refresh the app.' : 'Restore failed')
+  }
+
+  const tursoStatusColor =
+    syncStatus.tursoStatus === 'Connected' ? 'var(--primary)' :
+    syncStatus.tursoStatus === 'Error' ? 'var(--danger)' : 'var(--text-muted)'
+
+  const fbStatusColor =
+    fbStatus.status === 'Connected' ? 'var(--primary)' :
+    fbStatus.status === 'Not configured' ? 'var(--danger)' : 'var(--text-muted)'
+
   return (
     <div className="settings-section">
       {/* App Info */}
@@ -80,24 +147,63 @@ export default function Settings() {
         <div className="settings-item">
           <i className="fa-solid fa-code-branch"></i>
           <span className="settings-label">Version</span>
-          <span className="settings-value">{APP_VERSION}</span>
+          <span className="settings-value">{getLocalVersion()}</span>
+        </div>
+        <div className="settings-item">
+          <i className="fa-solid fa-signal"></i>
+          <span className="settings-label">Network</span>
+          <span className="settings-value" style={{
+            color: isOnline ? 'var(--primary)' : 'var(--danger)'
+          }}>
+            {isOnline ? 'Online' : 'Offline'}
+          </span>
         </div>
       </div>
 
-      {/* Cloud Database */}
+      {/* Cloud Databases */}
       <div className="settings-group">
-        <div className="settings-group-title">Cloud Database</div>
+        <div className="settings-group-title">Cloud Sync</div>
+
+        {/* Turso (Primary) */}
         <div className="settings-item">
-          <i className={`fa-solid ${cloudStatus.configured ? 'fa-cloud-arrow-up' : 'fa-cloud-xmark'}`}
-             style={{color: cloudStatus.configured ? 'var(--primary)' : 'var(--text-muted)'}}></i>
-          <span className="settings-label">Cloud Sync</span>
-          <span className="settings-value" style={{
-            color: cloudStatus.status === 'Connected' ? 'var(--primary)' :
-                   cloudStatus.status === 'Not configured' ? 'var(--danger)' : 'var(--text-muted)'
-          }}>
-            {cloudStatus.status}
+          <i className="fa-solid fa-database" style={{color: tursoStatusColor}}></i>
+          <span className="settings-label">Turso DB (Primary)</span>
+          <span className="settings-value" style={{ color: tursoStatusColor }}>
+            {syncStatus.tursoStatus}
           </span>
         </div>
+
+        {/* Firebase (Backup) */}
+        <div className="settings-item">
+          <i className="fa-solid fa-cloud" style={{color: fbStatusColor}}></i>
+          <span className="settings-label">Firebase (Backup)</span>
+          <span className="settings-value" style={{ color: fbStatusColor }}>
+            {fbStatus.status}
+          </span>
+        </div>
+
+        {/* Sync stats */}
+        <div className="settings-item">
+          <i className="fa-solid fa-arrows-rotate" style={{color:'var(--primary)'}}></i>
+          <span className="settings-label">Pending Changes</span>
+          <span className="settings-value" style={{
+            color: syncStatus.pending > 0 ? 'var(--danger)' : 'var(--primary)',
+            fontWeight: 700
+          }}>
+            {syncStatus.pending}
+          </span>
+        </div>
+
+        <div className="settings-item">
+          <i className="fa-solid fa-clock" style={{color:'var(--text-secondary)'}}></i>
+          <span className="settings-label">Last Synced</span>
+          <span className="settings-value">
+            {syncStatus.lastSyncedAt
+              ? new Date(syncStatus.lastSyncedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })
+              : 'Never'}
+          </span>
+        </div>
+
         <div className="settings-item" style={{flexDirection:'column',alignItems:'flex-start',gap:6}}>
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <i className="fa-solid fa-circle-info" style={{color:'var(--primary)'}}></i>
@@ -105,22 +211,16 @@ export default function Settings() {
           </div>
           <div style={{fontSize:12,color:'var(--text-secondary)',lineHeight:1.6,paddingLeft:28}}>
             <div style={{marginBottom:6}}>
-              <strong>Provider:</strong> Google Firebase (Firestore)
+              <strong>Primary Sync:</strong> Turso DB (SQLite-native cloud database). All your data syncs here when online.
             </div>
             <div style={{marginBottom:6}}>
-              <strong>Cost:</strong> Completely FREE. Firebase Spark plan includes 1GB storage and 50,000 reads/day. Khata uses less than 1MB and fewer than 100 reads/day.
+              <strong>Backup:</strong> Firebase (Google Cloud). Periodic full backup for disaster recovery.
             </div>
             <div style={{marginBottom:6}}>
-              <strong>Reliable:</strong> Firebase is owned and operated by Google. 99.95% uptime SLA. Same infrastructure used by apps with millions of users.
-            </div>
-            <div style={{marginBottom:6}}>
-              <strong>Long-term:</strong> Firebase has been running since 2012 (14+ years). Google has invested billions in it. Your data is stored in Google Cloud data centers with automatic backups.
-            </div>
-            <div style={{marginBottom:6}}>
-              <strong>Privacy:</strong> Data is tied to an anonymous device ID. No personal info is shared. Only you can access your data.
+              <strong>Offline:</strong> App works fully offline. Data is saved locally and synced when you're back online.
             </div>
             <div>
-              <strong>Recovery:</strong> If you clear app data or switch phones, your collections restore automatically from the cloud on next app open.
+              <strong>Recovery:</strong> If local data is lost, app auto-restores from Turso first, then Firebase.
             </div>
           </div>
         </div>
@@ -137,6 +237,16 @@ export default function Settings() {
         <div className="settings-item" onClick={handleRestore}>
           <i className="fa-solid fa-upload"></i>
           <span className="settings-label">Restore Data</span>
+          <i className="fa-solid fa-chevron-right" style={{fontSize:12,color:'var(--text-muted)'}}></i>
+        </div>
+        <div className="settings-item" onClick={handleForceBackup}>
+          <i className="fa-solid fa-shield-halved"></i>
+          <span className="settings-label">Force Auto-Backup Now</span>
+          <i className="fa-solid fa-chevron-right" style={{fontSize:12,color:'var(--text-muted)'}}></i>
+        </div>
+        <div className="settings-item" onClick={handleShowAutoBackups}>
+          <i className="fa-solid fa-clock-rotate-left"></i>
+          <span className="settings-label">Restore from Auto-Backup</span>
           <i className="fa-solid fa-chevron-right" style={{fontSize:12,color:'var(--text-muted)'}}></i>
         </div>
         <div className="settings-item danger" onClick={() => setShowClearConfirm(true)}>
@@ -162,6 +272,49 @@ export default function Settings() {
                 Clear Everything
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Auto-Backup List */}
+      {showBackupList && (
+        <div className="modal-overlay" onClick={() => setShowBackupList(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>Auto-Backups</h3>
+            {autoBackups.length === 0 ? (
+              <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 14 }}>
+                No auto-backups found. Backups are created automatically every 24 hours.
+              </p>
+            ) : (
+              <div style={{marginBottom: 16}}>
+                {autoBackups.map((b, i) => (
+                  <div
+                    key={i}
+                    className="settings-item"
+                    onClick={() => handleRestoreAutoBackup(i)}
+                    style={{marginBottom: 4}}
+                  >
+                    <i className="fa-solid fa-clock-rotate-left" style={{color:'var(--primary)'}}></i>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:600}}>
+                        Backup #{i + 1}
+                      </div>
+                      <div style={{fontSize:11,color:'var(--text-secondary)'}}>
+                        {new Date(b.createdAt).toLocaleString('en-IN')}
+                        {' · '}
+                        {b.data?.people?.length || 0} people,
+                        {' '}
+                        {b.data?.collections?.length || 0} records
+                      </div>
+                    </div>
+                    <i className="fa-solid fa-rotate-left" style={{fontSize:14,color:'var(--primary)'}}></i>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button className="btn-secondary" onClick={() => setShowBackupList(false)} style={{width:'100%'}}>
+              Close
+            </button>
           </div>
         </div>
       )}

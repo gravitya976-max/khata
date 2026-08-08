@@ -1,9 +1,5 @@
 {
   "appId": "com.khata.app",
   "appName": "Khata",
-  "webDir": "dist",
-  "server": {
-    "url": "https://gravitya976-max.github.io/khata",
-    "cleartext": true
-  }
+  "webDir": "dist"
 }
