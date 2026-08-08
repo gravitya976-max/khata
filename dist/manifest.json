@@ -1,0 +1,17 @@
+{
+  "name": "Khata",
+  "short_name": "Khata",
+  "description": "Daily Money Collection Tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FFFFFF",
+  "theme_color": "#2ECC71",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
