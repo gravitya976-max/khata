@@ -184,8 +184,8 @@ export default function Share() {
 
     let text = `=== ${person.name} — ${MONTH_NAMES[pMonth]} ${pYear} ===\n`
     text += `${'═'.repeat(LINE)}\n`
-    text += `${colHeader} │ ${colHeader}\n`
-    text += `${lineHalf}┼${lineHalf}\n`
+    text += `${colHeader} ║ ${colHeader}\n`
+    text += `${lineHalf}╫${lineHalf}\n`
 
     for (let d = 1; d <= half; d++) {
       const d1 = d
@@ -204,8 +204,8 @@ export default function Share() {
         rightCol = `${''.padEnd(dateWidth)}| ${''.padStart(amtWidth)}`
       }
 
-      text += `${leftCol} │ ${rightCol}\n`
-      text += `${lineHalf}┼${lineHalf}\n`
+      text += `${leftCol} ║ ${rightCol}\n`
+      text += `${lineHalf}╫${lineHalf}\n`
     }
 
     text += `TOTAL: Rs.${personMonthTotal}\n`
