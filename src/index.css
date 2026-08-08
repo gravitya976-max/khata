@@ -53,24 +53,61 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Font assignments */
-h1, h2, h3, h4,
+/* Universal Form Element Font Reset */
+input,
+button,
+select,
+textarea {
+  font-family: var(--font-body);
+}
+
+/* 1. HEADING FONT: Poppins */
+h1, h2, h3, h4, h5, h6,
 .app-header h1,
+.nav-item,
+.btn-primary,
+.btn-secondary,
+.btn-danger,
 .share-toggle button,
 .share-month-name,
 .settings-group-title,
 .date-detail-names-title,
-.date-detail-date,
 .date-detail-total-label,
 .preview-col-header,
 .share-prev-name,
 .month-label,
 .person-select,
-.date-nav-day {
+.date-nav-day,
+.names-label,
+.add-btn,
+.modal h3,
+.update-modal h3 {
   font-family: var(--font-heading);
 }
 
-/* Numbers: amounts, totals, dates */
+/* 2. BODY FONT: Inter */
+body,
+p,
+label,
+.person-info .name,
+.person-info .mobile,
+.search-bar input,
+.modal-field input,
+.modal-field label,
+.date-detail-person-name,
+.date-detail-person-mobile,
+.settings-label,
+.empty-state p {
+  font-family: var(--font-body);
+}
+
+/* 3. NUMBER FONT: JetBrains Mono */
+.amount-input,
+.collection-amount,
+.collection-input,
+.total-amount,
+.summary-total,
+.summary-item .value,
 .share-month-amount,
 .share-cal-amount,
 .share-prev-total,
@@ -78,12 +115,16 @@ h1, h2, h3, h4,
 .date-detail-person-amount,
 .preview-col-total,
 .preview-col-row span:last-child,
-.collection-amount,
-.collection-input,
-.total-amount,
-.summary-total,
 .settings-value,
-.app-header .version {
+.date-nav-full,
+.date-detail-date,
+.total-count,
+.total-count span,
+.hotkey-btn,
+.rupee,
+.rupee-symbol,
+input[type="number"],
+input[inputmode="numeric"] {
   font-family: var(--font-number);
 }
 

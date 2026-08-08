@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { exportAllData, importAllData, clearAllData, getAutoBackups, restoreFromAutoBackup, runAutoBackup } from '../db'
 import { getFirebaseStatus } from '../firebase'
 import { getSyncStatus } from '../syncQueue'
-import { getLocalVersion } from '../updater'
+import { getLocalVersion, checkForUpdate } from '../updater'
 
 export default function Settings() {
   const [toast, setToast] = useState('')
@@ -12,6 +12,7 @@ export default function Settings() {
   const [syncStatus, setSyncStatus] = useState(getSyncStatus())
   const [fbStatus, setFbStatus] = useState(getFirebaseStatus())
   const [isOnline, setIsOnline] = useState(navigator.onLine)
+  const [checkingUpdate, setCheckingUpdate] = useState(false)
 
   // Real-time network detection (fetch-based for Android WebView reliability)
   useEffect(() => {
@@ -126,6 +127,24 @@ export default function Settings() {
     showToast(success ? 'Restored from auto-backup. Refresh the app.' : 'Restore failed')
   }
 
+  const handleCheckUpdate = async () => {
+    if (checkingUpdate) return
+    setCheckingUpdate(true)
+    showToast('Checking for updates...')
+    try {
+      const update = await checkForUpdate()
+      if (update) {
+        showToast(`Update found! Version ${update.version}`)
+      } else {
+        showToast('App is up to date (v' + getLocalVersion() + ')')
+      }
+    } catch {
+      showToast('Failed to check for updates')
+    } finally {
+      setCheckingUpdate(false)
+    }
+  }
+
   const tursoStatusColor =
     syncStatus.tursoStatus === 'Connected' ? 'var(--primary)' :
     syncStatus.tursoStatus === 'Error' ? 'var(--danger)' : 'var(--text-muted)'
@@ -148,6 +167,17 @@ export default function Settings() {
           <i className="fa-solid fa-code-branch"></i>
           <span className="settings-label">Version</span>
           <span className="settings-value">{getLocalVersion()}</span>
+        </div>
+        <div className="settings-item" onClick={handleCheckUpdate} style={{ cursor: 'pointer' }}>
+          <i className="fa-solid fa-cloud-arrow-down" style={{ color: 'var(--primary)' }}></i>
+          <span className="settings-label" style={{ fontWeight: 600 }}>Check for Updates</span>
+          <span className="settings-value">
+            {checkingUpdate ? (
+              <i className="fa-solid fa-spinner fa-spin" style={{ color: 'var(--primary)' }}></i>
+            ) : (
+              <i className="fa-solid fa-chevron-right" style={{ fontSize: 12, color: 'var(--text-muted)' }}></i>
+            )}
+          </span>
         </div>
         <div className="settings-item">
           <i className="fa-solid fa-signal"></i>
