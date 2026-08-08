@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { exportAllData, importAllData, clearAllData, getAutoBackups, restoreFromAutoBackup, runAutoBackup } from '../db'
 import { getFirebaseStatus } from '../firebase'
 import { getSyncStatus } from '../syncQueue'
-import { getLocalVersion, checkForUpdate } from '../updater'
+import { getLocalVersion, checkForUpdate, isOTAActive, resetOTA } from '../updater'
 
 export default function Settings() {
   const [toast, setToast] = useState('')
@@ -188,6 +188,13 @@ export default function Settings() {
             {isOnline ? 'Online' : 'Offline'}
           </span>
         </div>
+        {isOTAActive() && (
+          <div className="settings-item" onClick={resetOTA} style={{ cursor: 'pointer' }}>
+            <i className="fa-solid fa-rotate-left" style={{ color: 'var(--danger)' }}></i>
+            <span className="settings-label" style={{ color: 'var(--danger)', fontWeight: 600 }}>Reset to Factory Version</span>
+            <i className="fa-solid fa-chevron-right" style={{ fontSize: 12, color: 'var(--text-muted)' }}></i>
+          </div>
+        )}
       </div>
 
       {/* Cloud Databases */}

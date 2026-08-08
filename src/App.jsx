@@ -47,10 +47,10 @@ export default function App() {
     init()
   }, [])
 
-  // Listen for service worker update events
+  // Listen for service worker update events & check for OTA update on launch
   useEffect(() => {
     listenForUpdates((update) => {
-      if (update.state === 'ready') {
+      if (update.state === 'ready' || update.state === 'downloading') {
         setUpdateReady(true)
         setUpdateInfo(update.info)
         setShowUpdateModal(true)
@@ -58,12 +58,24 @@ export default function App() {
     })
 
     const unsub = onUpdateStateChange((update) => {
-      if (update.state === 'ready') {
+      if (update.state === 'ready' || update.state === 'downloading') {
         setUpdateReady(true)
         setUpdateInfo(update.info)
         setShowUpdateModal(true)
       }
     })
+
+    // Check for OTA updates automatically on launch
+    const autoCheck = async () => {
+      await new Promise((r) => setTimeout(r, 2000))
+      const update = await checkForUpdate()
+      if (update) {
+        setUpdateReady(true)
+        setUpdateInfo({ version: update.version, changelog: update.changelog || 'New update available' })
+        setShowUpdateModal(true)
+      }
+    }
+    autoCheck()
 
     return unsub
   }, [])

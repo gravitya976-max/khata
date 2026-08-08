@@ -10,8 +10,20 @@ let updateState = 'idle'
 let updateInfo = null
 let stateListeners = []
 
+const HOSTED_APP_URL = 'https://gravitya976-max.github.io/khata/'
+
 export function getLocalVersion() {
-  return LOCAL_VERSION
+  return localStorage.getItem('ota_version') || LOCAL_VERSION
+}
+
+export function isOTAActive() {
+  return localStorage.getItem('ota_active') === 'true'
+}
+
+export function resetOTA() {
+  localStorage.removeItem('ota_active')
+  localStorage.removeItem('ota_version')
+  window.location.href = 'http://localhost/'
 }
 
 export function getUpdateState() {
@@ -38,6 +50,7 @@ const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
 export async function checkForUpdate() {
   if (!navigator.onLine) return null
 
+  const currentVer = getLocalVersion()
   setState('checking')
   try {
     const res = await fetch(VERSION_CHECK_URL, { cache: 'no-store' })
@@ -47,7 +60,7 @@ export async function checkForUpdate() {
     }
     const remote = await res.json()
 
-    if (remote.version && remote.version !== LOCAL_VERSION && isNewer(remote.version, LOCAL_VERSION)) {
+    if (remote.version && remote.version !== currentVer && isNewer(remote.version, currentVer)) {
       setState('downloading', {
         version: remote.version,
         changelog: remote.changelog || 'Bug fixes and improvements',
@@ -87,7 +100,6 @@ export function listenForUpdates(callback) {
     }
   })
 
-  // Check for waiting service worker (update downloaded but not active)
   navigator.serviceWorker.ready.then((reg) => {
     if (reg.waiting) {
       setState('ready', updateInfo || { version: 'new', changelog: 'Update ready to install' })
@@ -105,27 +117,6 @@ export function listenForUpdates(callback) {
       }
     })
   })
-
-  // Check for version update from remote when online
-  if (navigator.onLine) {
-    checkForUpdate().then((remote) => {
-      if (remote) {
-        // Trigger SW update check to download new assets
-        navigator.serviceWorker.ready.then((reg) => reg.update())
-      }
-    })
-  }
-
-  // Also check when coming online
-  window.addEventListener('online', () => {
-    setTimeout(() => {
-      checkForUpdate().then((remote) => {
-        if (remote) {
-          navigator.serviceWorker.ready.then((reg) => reg.update())
-        }
-      })
-    }, 3000)
-  })
 }
 
 // ──── Apply update ────
@@ -133,7 +124,11 @@ export function listenForUpdates(callback) {
 export function applyUpdate() {
   setState('installing')
 
-  // Tell the waiting service worker to activate
+  if (updateInfo && updateInfo.version) {
+    localStorage.setItem('ota_version', updateInfo.version)
+  }
+  localStorage.setItem('ota_active', 'true')
+
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then((reg) => {
       if (reg.waiting) {
@@ -142,8 +137,9 @@ export function applyUpdate() {
     })
   }
 
-  // Reload to pick up new cached assets
-  setTimeout(() => window.location.reload(), 500)
+  setTimeout(() => {
+    window.location.href = HOSTED_APP_URL
+  }, 300)
 }
 
 // ──── Dismiss update (persist reminder) ────
