@@ -205,9 +205,9 @@ export default function Share() {
       }
 
       text += `${leftCol} ║ ${rightCol}\n`
-      text += `${lineHalf}╫${lineHalf}\n`
     }
 
+    text += `${lineHalf}╫${lineHalf}\n`
     text += `TOTAL: Rs.${personMonthTotal}\n`
     text += `${'═'.repeat(LINE)}\n`
     return text
@@ -231,9 +231,9 @@ export default function Share() {
       const name = r.name.padEnd(maxNameLen, ' ')
       const amtCol = `Rs.${r.amount}`.padStart(maxAmtLen + 3)
       text += `${name} | ${amtCol}\n`
-      text += `${'─'.repeat(LINE)}\n`
     })
     const paid = rows.filter(r => r.status === 'paid').length
+    text += `${'─'.repeat(LINE)}\n`
     text += `Collected: ${paid}/${rows.length}\n`
     text += `${'TOTAL'.padEnd(maxNameLen)} | ${'Rs.' + total}`.padEnd(LINE) + `\n`
     text += `${'═'.repeat(LINE)}\n`
@@ -291,9 +291,9 @@ export default function Share() {
       }
 
       text += `${leftCol} ║ ${rightCol}\n`
-      text += `${lineHalf}╫${lineHalf}\n`
     }
 
+    text += `${lineHalf}╫${lineHalf}\n`
     text += `TOTAL: Rs.${monthTotal}\n`
     text += `${'═'.repeat(LINE)}\n`
     return text
