@@ -242,27 +242,59 @@ export default function Share() {
 
   const buildWholeMonthText = () => {
     const daysInMonth = getDaysInMonth(year, month)
-    const LINE = 28
-
-    let text = `=== ${MONTH_NAMES[month]} ${year} ===\n`
-    text += `${'═'.repeat(LINE)}\n`
-    text += `Date        | Amount\n`
-    text += `${'─'.repeat(LINE)}\n`
-
+    const amounts = []
     for (let d = 1; d <= daysInMonth; d++) {
       const m = String(month + 1).padStart(2, '0')
       const dd = String(d).padStart(2, '0')
-      const dateStr = `${year}-${m}-${dd}`
-      const amount = dailyTotals[dateStr] || 0
-      const dateObj = new Date(dateStr + 'T00:00:00')
-      const dayName = dateObj.toLocaleDateString('en-IN', { weekday: 'short' })
-      const dateCol = `${dayName} ${dd}/${m}`.padEnd(11)
-      const amtCol = `Rs.${amount}`.padStart(10)
-      text += `${dateCol} | ${amtCol}\n`
-      text += `${'─'.repeat(LINE)}\n`
+      amounts.push(dailyTotals[`${year}-${m}-${dd}`] || 0)
+    }
+    const maxAmtLen = Math.max(...amounts.map((a) => String(a).length), String(monthTotal).length, 4)
+
+    const dateWidth = 10
+    const amtWidth = maxAmtLen + 3
+    const half = Math.ceil(daysInMonth / 2)
+
+    const colHeader = `Date`.padEnd(dateWidth) + `| ` + `Amount`.padStart(amtWidth)
+    const lineHalf = '─'.repeat(dateWidth + amtWidth + 2)
+    const LINE = (dateWidth + amtWidth + 2) * 2 + 3
+
+    let text = `=== ${MONTH_NAMES[month]} ${year} ===\n`
+    text += `${'═'.repeat(LINE)}\n`
+    text += `${colHeader} ║ ${colHeader}\n`
+    text += `${lineHalf}╫${lineHalf}\n`
+
+    for (let d = 1; d <= half; d++) {
+      const d1 = d
+      const d2 = d + half
+
+      const m1 = String(month + 1).padStart(2, '0')
+      const dd1 = String(d1).padStart(2, '0')
+      const dateStr1 = `${year}-${m1}-${dd1}`
+      const amt1 = dailyTotals[dateStr1] || 0
+      const dateObj1 = new Date(dateStr1 + 'T00:00:00')
+      const dayName1 = dateObj1.toLocaleDateString('en-IN', { weekday: 'short' })
+      const dateCol1 = `${dayName1} ${dd1}/${m1}`.padEnd(dateWidth)
+      const leftCol = `${dateCol1}| ${('Rs.' + amt1).padStart(amtWidth)}`
+
+      let rightCol = ''
+      if (d2 <= daysInMonth) {
+        const m2 = String(month + 1).padStart(2, '0')
+        const dd2 = String(d2).padStart(2, '0')
+        const dateStr2 = `${year}-${m2}-${dd2}`
+        const amt2 = dailyTotals[dateStr2] || 0
+        const dateObj2 = new Date(dateStr2 + 'T00:00:00')
+        const dayName2 = dateObj2.toLocaleDateString('en-IN', { weekday: 'short' })
+        const dateCol2 = `${dayName2} ${dd2}/${m2}`.padEnd(dateWidth)
+        rightCol = `${dateCol2}| ${('Rs.' + amt2).padStart(amtWidth)}`
+      } else {
+        rightCol = `${''.padEnd(dateWidth)}| ${''.padStart(amtWidth)}`
+      }
+
+      text += `${leftCol} ║ ${rightCol}\n`
+      text += `${lineHalf}╫${lineHalf}\n`
     }
 
-    text += `${'TOTAL'.padEnd(11)} | ${'Rs.' + monthTotal}`.padStart(LINE) + `\n`
+    text += `TOTAL: Rs.${monthTotal}\n`
     text += `${'═'.repeat(LINE)}\n`
     return text
   }
