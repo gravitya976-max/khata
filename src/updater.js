@@ -1,16 +1,66 @@
 // OTA Update for Khata
-// Assets are bundled locally in the APK (offline-first).
-// When online, checks for a new version from the hosted version.json.
-// Service worker handles caching; this module manages the update UX.
+// Downloads updated JS/CSS bundle into local IndexedDB and executes in-place.
+// Offline-first: works 100% offline once downloaded. No website URL redirects.
 
 const LOCAL_VERSION = '1.2.0'
+const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
+const BASE_HOSTED_URL = 'https://gravitya976-max.github.io/khata/'
 
 // Update state machine: idle → checking → downloading → ready → installing
 let updateState = 'idle'
 let updateInfo = null
 let stateListeners = []
 
-const HOSTED_APP_URL = 'https://gravitya976-max.github.io/khata/'
+// ──── IndexedDB OTA Storage ────
+
+function openOtaDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('khata_ota_cache', 1)
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result
+      if (!db.objectStoreNames.contains('bundle')) {
+        db.createObjectStore('bundle')
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+export async function storeOtaBundle(css, js, version) {
+  try {
+    const db = await openOtaDB()
+    const tx = db.transaction('bundle', 'readwrite')
+    tx.objectStore('bundle').put({ css, js, version, time: Date.now() }, 'current')
+    await new Promise((res) => { tx.oncomplete = res })
+  } catch (err) {
+    console.warn('Failed to store OTA bundle:', err)
+  }
+}
+
+export async function getOtaBundle() {
+  try {
+    const db = await openOtaDB()
+    const tx = db.transaction('bundle', 'readonly')
+    const req = tx.objectStore('bundle').get('current')
+    return new Promise((resolve) => {
+      req.onsuccess = () => resolve(req.result || null)
+      req.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
+export async function clearOtaBundle() {
+  try {
+    const db = await openOtaDB()
+    const tx = db.transaction('bundle', 'readwrite')
+    tx.objectStore('bundle').delete('current')
+  } catch {}
+}
+
+// ──── State getters & helpers ────
 
 export function getLocalVersion() {
   return localStorage.getItem('ota_version') || LOCAL_VERSION
@@ -20,10 +70,11 @@ export function isOTAActive() {
   return localStorage.getItem('ota_active') === 'true'
 }
 
-export function resetOTA() {
+export async function resetOTA() {
   localStorage.removeItem('ota_active')
   localStorage.removeItem('ota_version')
-  window.location.href = 'http://localhost/'
+  await clearOtaBundle()
+  window.location.reload()
 }
 
 export function getUpdateState() {
@@ -43,9 +94,7 @@ function setState(state, info = null) {
   stateListeners.forEach((cb) => cb({ state: updateState, info: updateInfo }))
 }
 
-// ──── Check for updates via version.json ────
-
-const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
+// ──── Check for updates & download bundle ────
 
 export async function checkForUpdate() {
   if (!navigator.onLine) return null
@@ -61,6 +110,33 @@ export async function checkForUpdate() {
     const remote = await res.json()
 
     if (remote.version && remote.version !== currentVer && isNewer(remote.version, currentVer)) {
+      // Background download of remote bundle
+      try {
+        const htmlRes = await fetch(BASE_HOSTED_URL + 'index.html', { cache: 'no-store' })
+        const htmlText = await htmlRes.text()
+
+        const cssMatch = htmlText.match(/href="([^"]+\.css)"/)
+        const jsMatch = htmlText.match(/src="([^"]+\.js)"/)
+
+        if (cssMatch && jsMatch) {
+          const cssUrl = new URL(cssMatch[1], BASE_HOSTED_URL).href
+          const jsUrl = new URL(jsMatch[1], BASE_HOSTED_URL).href
+
+          const [cssRes, jsRes] = await Promise.all([
+            fetch(cssUrl, { cache: 'no-store' }),
+            fetch(jsUrl, { cache: 'no-store' })
+          ])
+
+          if (cssRes.ok && jsRes.ok) {
+            const cssText = await cssRes.text()
+            const jsText = await jsRes.text()
+            await storeOtaBundle(cssText, jsText, remote.version)
+          }
+        }
+      } catch (e) {
+        console.warn('Bundle download failed:', e)
+      }
+
       setState('downloading', {
         version: remote.version,
         changelog: remote.changelog || 'Bug fixes and improvements',
@@ -88,8 +164,6 @@ function isNewer(remote, local) {
   return false
 }
 
-// ──── Service Worker update detection ────
-
 export function listenForUpdates(callback) {
   if (!('serviceWorker' in navigator)) return
 
@@ -99,29 +173,11 @@ export function listenForUpdates(callback) {
       callback({ state: 'ready', info: updateInfo || { version: 'new', changelog: 'App updated in background' } })
     }
   })
-
-  navigator.serviceWorker.ready.then((reg) => {
-    if (reg.waiting) {
-      setState('ready', updateInfo || { version: 'new', changelog: 'Update ready to install' })
-      callback({ state: 'ready', info: updateInfo || { version: 'new', changelog: 'Update ready to install' } })
-    }
-    reg.addEventListener('updatefound', () => {
-      const newWorker = reg.installing
-      if (newWorker) {
-        newWorker.addEventListener('statechange', () => {
-          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-            setState('ready', updateInfo || { version: 'new', changelog: 'Update ready to install' })
-            callback({ state: 'ready', info: updateInfo || { version: 'new', changelog: 'Update ready to install' } })
-          }
-        })
-      }
-    })
-  })
 }
 
 // ──── Apply update ────
 
-export function applyUpdate() {
+export async function applyUpdate() {
   setState('installing')
 
   if (updateInfo && updateInfo.version) {
@@ -129,20 +185,12 @@ export function applyUpdate() {
   }
   localStorage.setItem('ota_active', 'true')
 
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.ready.then((reg) => {
-      if (reg.waiting) {
-        reg.waiting.postMessage({ type: 'SKIP_WAITING' })
-      }
-    })
-  }
-
   setTimeout(() => {
-    window.location.href = HOSTED_APP_URL
+    window.location.reload()
   }, 300)
 }
 
-// ──── Dismiss update (persist reminder) ────
+// ──── Dismiss update ────
 
 let dismissedVersion = null
 
