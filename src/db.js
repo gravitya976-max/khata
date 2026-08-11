@@ -216,6 +216,27 @@ export async function saveCollection(personId, date, amount) {
   return result
 }
 
+export async function deleteCollection(personId, date) {
+  const db = await openDB()
+  const result = await new Promise((resolve, reject) => {
+    const tx = db.transaction('collections', 'readwrite')
+    const store = tx.objectStore('collections')
+    const idx = store.index('personDate')
+    const req = idx.get([personId, date])
+
+    req.onsuccess = () => {
+      if (req.result) store.delete(req.result.id)
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+
+  enqueue('deleteCollection', { personId, date })
+  scheduleFirebaseBackup()
+
+  return result
+}
+
 // Settings
 export async function getSetting(key, defaultValue = null) {
   const record = await getById('settings', key)

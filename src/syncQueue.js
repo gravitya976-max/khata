@@ -8,6 +8,7 @@ import {
   getTursoStatus,
   pushPeople,
   pushCollection,
+  pushDeleteCollection,
   pushDeletePerson,
   pushClearAll,
   pushFullData,
@@ -153,6 +154,9 @@ export async function processQueue() {
             break
           case 'syncCollection':
             success = await pushCollection(item.payload.personId, item.payload.date, item.payload.amount)
+            break
+          case 'deleteCollection':
+            success = await pushDeleteCollection(item.payload.personId, item.payload.date)
             break
           case 'deletePerson':
             success = await pushDeletePerson(item.payload.id)

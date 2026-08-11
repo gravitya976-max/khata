@@ -117,6 +117,21 @@ export async function pushCollection(personId, date, amount) {
   }
 }
 
+export async function pushDeleteCollection(personId, date) {
+  if (!client || !isConnected) return false
+  try {
+    await client.execute({
+      sql: 'DELETE FROM collections WHERE person_id = ? AND date = ?',
+      args: [personId, date],
+    })
+    return true
+  } catch (err) {
+    console.warn('Turso collection delete failed:', err.message)
+    connectionError = err.message
+    return false
+  }
+}
+
 export async function pushDeletePerson(id) {
   if (!client || !isConnected) return false
   try {
