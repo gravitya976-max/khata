@@ -1,5 +1,5 @@
 {
-  "version": "1.2.5",
-  "timestamp": "2026-08-08T15:55:00Z",
-  "changelog": "Whole Month Share updated to 2-column layout with unbroken vertical line"
+  "version": "1.2.6",
+  "timestamp": "2026-08-11T15:46:00Z",
+  "changelog": "Added ability to clear/delete mistaken collection entries"
 }
