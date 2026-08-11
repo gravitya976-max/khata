@@ -497,6 +497,26 @@ input[inputmode="numeric"] {
   cursor: pointer;
 }
 
+.delete-collection-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--danger-light);
+  color: var(--danger);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.delete-collection-btn:active {
+  transform: scale(0.9);
+  background: var(--danger);
+  color: white;
+}
+
 /* Hotkey Buttons */
 .hotkeys {
   display: flex;

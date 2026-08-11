@@ -67,7 +67,8 @@ export function getLocalVersion() {
 }
 
 export function isOTAActive() {
-  return localStorage.getItem('ota_active') === 'true'
+  const state = localStorage.getItem('ota_active')
+  return state === 'true' || state === 'booting'
 }
 
 export async function resetOTA() {

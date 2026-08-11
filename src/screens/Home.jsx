@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getAllPeople, getCollectionsByDate, saveCollection } from '../db'
+import { deleteCollection, getAllPeople, getCollectionsByDate, saveCollection } from '../db'
 
 const HOTKEYS = [100, 150, 200, 250, 300]
 
@@ -38,6 +38,15 @@ export default function Home({ onViewPerson }) {
   const handleHotkey = async (personId, amount) => {
     setCollections((prev) => ({ ...prev, [personId]: amount }))
     await saveCollection(personId, date, amount)
+  }
+
+  const handleDeleteCollection = async (personId) => {
+    await deleteCollection(personId, date)
+    setCollections((prev) => {
+      const next = { ...prev }
+      delete next[personId]
+      return next
+    })
   }
 
   const totalCollected = Object.values(collections).reduce(
@@ -149,6 +158,16 @@ export default function Home({ onViewPerson }) {
                     }}
                   />
                 </div>
+                {amount !== undefined && (
+                  <button
+                    className="delete-collection-btn"
+                    onClick={() => handleDeleteCollection(person.id)}
+                    aria-label={`Remove ${person.name}'s collection for this date`}
+                    title="Remove collection"
+                  >
+                    <i className="fa-solid fa-trash"></i>
+                  </button>
+                )}
                 <button className="chevron-btn" onClick={() => onViewPerson(person.id)}>
                   <i className="fa-solid fa-chevron-right"></i>
                 </button>
