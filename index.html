@@ -1,41 +1,25 @@
 <!doctype html>
 <html lang="en">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="description" content="Khata - Daily Money Collection Tracker" />
-  <meta name="theme-color" content="#2ECC71" />
-  <title>Khata</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
-  <link rel="manifest" href="/khata/manifest.json" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-  <script type="module" crossorigin src="/khata/assets/index-84ohSev0.js"></script>
-  <link rel="stylesheet" crossorigin href="/khata/assets/index-C0-LLF3Y.css">
-</head>
-
-<body>
-  <div id="root"></div>
-  <script>
-    (function() {
-      try {
-        var ver = localStorage.getItem('ota_version');
-        if (ver === '1.2.6' || ver === '1.2.7' || ver === '1.2.8' || ver === '1.3.0' || ver === '1.3.1') {
-          console.warn('Purging broken OTA version:', ver);
-          localStorage.removeItem('ota_active');
-          localStorage.removeItem('ota_version');
-          if (window.indexedDB) indexedDB.deleteDatabase('khata_ota_cache');
-        }
-      } catch(e) {}
-    })();
-  </script>
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-      })
-    }
-  </script>
-</body>
-
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="Khata - Daily Money Collection Tracker" />
+    <meta name="theme-color" content="#2ECC71" />
+    <title>Khata</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <link rel="manifest" href="/khata/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <script type="module" crossorigin src="/khata/assets/index-fNCLDT4U.js"></script>
+    <link rel="stylesheet" crossorigin href="/khata/assets/index-CRtoCyxH.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+        })
+      }
+    </script>
+  </body>
 </html>
