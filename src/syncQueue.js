@@ -1,7 +1,8 @@
 // syncQueue.js — Persistent sync queue for Khata
 // Queues all write operations in IndexedDB and replays to Turso when online.
-// Firebase is used only for periodic backup.
+// All Turso operations are namespaced by user ID.
 
+import { openDB, getUserId } from './db'
 import {
   initTurso,
   isTursoConfigured,
@@ -9,6 +10,7 @@ import {
   pushPeople,
   pushCollection,
   pushDeletePerson,
+  pushDeleteCollection,
   pushClearAll,
   pushFullData,
   setSyncTimestamp,
@@ -17,7 +19,6 @@ import {
 } from './turso'
 
 const QUEUE_STORE = 'sync_queue'
-let db = null
 let isProcessing = false
 let statusListeners = []
 
@@ -53,37 +54,10 @@ function updateStatus(updates) {
   notifyListeners()
 }
 
-// ──── Queue DB Access ────
-// Uses the same IndexedDB instance as the main db.js (via shared DB_NAME)
-// The sync_queue store is created in db.js's onupgradeneeded handler
-
-const DB_NAME = 'khata-db'
-const DB_VERSION = 2
-
-function openQueueDB() {
-  if (db) return Promise.resolve(db)
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = (e) => {
-      const database = e.target.result
-      if (!database.objectStoreNames.contains(QUEUE_STORE)) {
-        const store = database.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
-        store.createIndex('status', 'status', { unique: false })
-        store.createIndex('createdAt', 'createdAt', { unique: false })
-      }
-    }
-    req.onsuccess = (e) => {
-      db = e.target.result
-      resolve(db)
-    }
-    req.onerror = (e) => reject(e.target.error)
-  })
-}
-
 // ──── Enqueue ────
 
 export async function enqueue(action, payload) {
-  const database = await openQueueDB()
+  const database = await openDB()
   return new Promise((resolve, reject) => {
     const tx = database.transaction(QUEUE_STORE, 'readwrite')
     const store = tx.objectStore(QUEUE_STORE)
@@ -96,7 +70,6 @@ export async function enqueue(action, payload) {
     })
     tx.oncomplete = () => {
       updatePendingCount()
-      // Try to process immediately if online
       if (navigator.onLine) processQueue()
       resolve()
     }
@@ -108,7 +81,7 @@ export async function enqueue(action, payload) {
 
 async function updatePendingCount() {
   try {
-    const database = await openQueueDB()
+    const database = await openDB()
     const tx = database.transaction(QUEUE_STORE, 'readonly')
     const store = tx.objectStore(QUEUE_STORE)
     const idx = store.index('status')
@@ -126,11 +99,14 @@ export async function processQueue() {
   if (isProcessing || !navigator.onLine) return
   if (!isTursoConfigured()) return
 
+  // Must have a user ID to sync
+  const userId = await getUserId()
+  if (!userId) return
+
   isProcessing = true
   updateStatus({ isSyncing: true })
 
   try {
-    // Ensure Turso is initialized
     const connected = await initTurso()
     if (!connected) {
       updateStatus({ isSyncing: false, tursoStatus: getTursoStatus().status, error: getTursoStatus().error })
@@ -140,8 +116,10 @@ export async function processQueue() {
 
     updateStatus({ tursoStatus: 'Connected' })
 
-    const database = await openQueueDB()
+    const database = await openDB()
     const items = await getPendingItems(database)
+
+    let allSucceeded = true
 
     for (const item of items) {
       let success = false
@@ -149,23 +127,26 @@ export async function processQueue() {
       try {
         switch (item.action) {
           case 'syncPeople':
-            success = await pushPeople(item.payload.people)
+            success = await pushPeople(item.payload.people, userId)
             break
           case 'syncCollection':
-            success = await pushCollection(item.payload.personId, item.payload.date, item.payload.amount)
+            success = await pushCollection(item.payload.personId, item.payload.date, item.payload.amount, userId)
             break
           case 'deletePerson':
-            success = await pushDeletePerson(item.payload.id)
+            success = await pushDeletePerson(item.payload.id, userId)
+            break
+          case 'deleteCollection':
+            success = await pushDeleteCollection(item.payload.personId, item.payload.date, userId)
             break
           case 'clearAll':
-            success = await pushClearAll()
+            success = await pushClearAll(userId)
             break
           case 'fullSync':
-            success = await pushFullData(item.payload)
+            success = await pushFullData(item.payload, userId)
             break
           default:
             console.warn('Unknown sync action:', item.action)
-            success = true // Mark unknown actions as done to not block queue
+            success = true
         }
       } catch (err) {
         console.warn('Sync action failed:', item.action, err.message)
@@ -174,19 +155,22 @@ export async function processQueue() {
       if (success) {
         await markDone(database, item.id)
       } else {
+        allSucceeded = false
         await markRetry(database, item.id, item.retryCount)
-        // Stop processing on failure — will retry later
         break
       }
     }
 
-    await setSyncTimestamp()
-    const lastSync = await getLastSyncTime()
+    if (allSucceeded && items.length > 0) {
+      await setSyncTimestamp(userId)
+    }
+
+    const lastSync = await getLastSyncTime(userId)
     updateStatus({
       isSyncing: false,
       lastSyncedAt: lastSync,
       tursoStatus: 'Connected',
-      error: null,
+      error: allSucceeded ? null : 'Some items failed to sync',
     })
     await updatePendingCount()
   } catch (err) {
@@ -235,7 +219,6 @@ function markRetry(database, id, currentRetry) {
       const item = req.result
       if (item) {
         item.retryCount = currentRetry + 1
-        // After 5 retries, mark as failed
         if (item.retryCount >= 5) {
           item.status = 'failed'
         }
@@ -247,34 +230,34 @@ function markRetry(database, id, currentRetry) {
   })
 }
 
-// ──── Cleanup old done items (keep last 50) ────
+// ──── Cleanup old done items ────
 
 async function cleanupDoneItems() {
   try {
-    const database = await openQueueDB()
+    const database = await openDB()
     const tx = database.transaction(QUEUE_STORE, 'readwrite')
     const store = tx.objectStore(QUEUE_STORE)
     const idx = store.index('status')
     const req = idx.getAll('done')
     req.onsuccess = () => {
       const done = req.result.sort((a, b) => b.completedAt - a.completedAt)
-      // Keep last 50, delete the rest
       done.slice(50).forEach((item) => store.delete(item.id))
     }
   } catch {
   }
 }
 
-// ──── Cloud restore (Turso) ────
+// ──── Cloud restore (Turso, per user) ────
 
-export async function tryTursoRestore() {
+export async function tryTursoRestore(userId) {
   if (!isTursoConfigured() || !navigator.onLine) return null
+  if (!userId) return null
 
   try {
     const connected = await initTurso()
     if (!connected) return null
 
-    const data = await pullAllData()
+    const data = await pullAllData(userId)
     return data
   } catch (err) {
     console.warn('Turso restore failed:', err.message)
@@ -287,7 +270,6 @@ export async function tryTursoRestore() {
 export function initSyncListeners() {
   window.addEventListener('online', () => {
     updateStatus({ isOnline: true })
-    // Process queue when we come back online
     setTimeout(() => processQueue(), 1000)
   })
 
@@ -295,16 +277,13 @@ export function initSyncListeners() {
     updateStatus({ isOnline: false })
   })
 
-  // Update initial status
   updateStatus({ isOnline: navigator.onLine })
   updatePendingCount()
 
-  // Try to process queue on init
   if (navigator.onLine) {
     setTimeout(() => processQueue(), 2000)
   }
 
-  // Periodic queue processing (every 60s when online)
   setInterval(() => {
     if (navigator.onLine) {
       processQueue()
@@ -312,12 +291,14 @@ export function initSyncListeners() {
     }
   }, 60000)
 
-  // Load last sync time
+  // Load last sync time for this user
   if (isTursoConfigured() && navigator.onLine) {
-    initTurso().then(() => {
-      getLastSyncTime().then((t) => {
+    initTurso().then(async () => {
+      const userId = await getUserId()
+      if (userId) {
+        const t = await getLastSyncTime(userId)
         if (t) updateStatus({ lastSyncedAt: t, tursoStatus: 'Connected' })
-      })
+      }
     })
   }
 }

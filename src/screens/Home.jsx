@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getAllPeople, getCollectionsByDate, saveCollection } from '../db'
+import { getAllPeople, getCollectionsByDate, saveCollection, deleteCollection } from '../db'
 
 const HOTKEYS = [100, 150, 200, 250, 300]
 
@@ -31,8 +31,27 @@ export default function Home({ onViewPerson }) {
 
   const handleAmountSave = async (personId) => {
     const amount = collections[personId]
-    if (amount === undefined || amount === '') return
+    // If field is blank or undefined, delete the collection entry
+    if (amount === undefined || amount === '') {
+      // Only delete if there was previously a saved entry
+      await deleteCollection(personId, date)
+      setCollections((prev) => {
+        const next = { ...prev }
+        delete next[personId]
+        return next
+      })
+      return
+    }
     await saveCollection(personId, date, typeof amount === 'number' ? amount : 0)
+  }
+
+  const handleClearAmount = async (personId) => {
+    await deleteCollection(personId, date)
+    setCollections((prev) => {
+      const next = { ...prev }
+      delete next[personId]
+      return next
+    })
   }
 
   const handleHotkey = async (personId, amount) => {
@@ -148,6 +167,16 @@ export default function Home({ onViewPerson }) {
                       if (e.key === 'Enter') e.target.blur()
                     }}
                   />
+                  {/* Clear button — visible when an amount is saved */}
+                  {hasAmount && activeInput !== person.id && (
+                    <button
+                      className="clear-amount-btn"
+                      onClick={() => handleClearAmount(person.id)}
+                      title="Clear amount"
+                    >
+                      <i className="fa-solid fa-xmark"></i>
+                    </button>
+                  )}
                 </div>
                 <button className="chevron-btn" onClick={() => onViewPerson(person.id)}>
                   <i className="fa-solid fa-chevron-right"></i>

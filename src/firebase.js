@@ -1,17 +1,17 @@
 // Firebase configuration for Khata
 // BACKUP ONLY: Firebase is the last-resort backup storage.
-// Primary sync goes through Turso DB (see turso.js + syncQueue.js).
-// Firebase receives a periodic full JSON dump for disaster recovery.
+// Path is dynamic per user: users/{userId}/backups/latest
 
 import { initializeApp } from 'firebase/app'
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   getDoc,
   setDoc,
   getDocs,
-  collection,
-  enableIndexedDbPersistence
+  collection
 } from 'firebase/firestore'
 
 const firebaseConfig = {
@@ -25,7 +25,6 @@ const firebaseConfig = {
 
 let app = null
 let db = null
-const USER_KEY = 'khata-default'  // Fixed key — all installs share the same backup
 let isReady = false
 
 function isConfigured() {
@@ -41,13 +40,11 @@ export function initFirebase() {
 
   try {
     app = initializeApp(firebaseConfig)
-    db = getFirestore(app)
-
-    // Enable offline persistence
-    enableIndexedDbPersistence(db).catch(() => {})
-
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    })
     isReady = true
-    console.log('Firebase ready (fixed key: ' + USER_KEY + ')')
+    console.log('Firebase ready')
   } catch (err) {
     console.warn('Firebase init failed:', err.message)
   }
@@ -56,7 +53,6 @@ export function initFirebase() {
 function whenReady() {
   return new Promise((resolve) => {
     if (isReady) return resolve()
-    // Retry for up to 3s
     let elapsed = 0
     const interval = setInterval(() => {
       elapsed += 200
@@ -68,33 +64,33 @@ function whenReady() {
   })
 }
 
-// ──── Backup: Push full data dump to Firebase ────
+// ──── Backup: Push full data dump to Firebase (per user) ────
 
-export async function pushFullBackup(data) {
+export async function pushFullBackup(data, userId = 'default') {
   if (!isConfigured() || !db) return
   await whenReady()
   try {
-    await setDoc(doc(db, `users/${USER_KEY}/backups`, 'latest'), {
+    await setDoc(doc(db, `users/${userId}/backups`, 'latest'), {
       people: JSON.stringify(data.people || []),
       collections: JSON.stringify(data.collections || []),
       settings: JSON.stringify(data.settings || []),
       timestamp: Date.now(),
       exportedAt: data.exportedAt || new Date().toISOString(),
     })
-    console.log('Firebase backup pushed')
+    console.log(`Firebase backup pushed for user: ${userId}`)
   } catch (err) {
     console.warn('Firebase backup failed:', err.message)
   }
 }
 
-// ──── Restore: Pull data from Firebase (last resort) ────
+// ──── Restore: Pull data from Firebase (per user) ────
 
-export async function restoreFromCloud() {
+export async function restoreFromCloud(userId = 'default') {
   if (!isConfigured() || !db) return null
   await whenReady()
   try {
     // Try the new backup format first
-    const backupDoc = await getDoc(doc(db, `users/${USER_KEY}/backups`, 'latest'))
+    const backupDoc = await getDoc(doc(db, `users/${userId}/backups`, 'latest'))
     if (backupDoc.exists()) {
       const d = backupDoc.data()
       return {
@@ -104,8 +100,8 @@ export async function restoreFromCloud() {
     }
 
     // Fallback to old format (legacy collections)
-    const peopleSnap = await getDocs(collection(db, `users/${USER_KEY}/people`))
-    const collectionsSnap = await getDocs(collection(db, `users/${USER_KEY}/collections`))
+    const peopleSnap = await getDocs(collection(db, `users/${userId}/people`))
+    const collectionsSnap = await getDocs(collection(db, `users/${userId}/collections`))
 
     if (peopleSnap.empty) return null
 

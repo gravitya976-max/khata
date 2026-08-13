@@ -4,10 +4,11 @@ import Monthly from './screens/Monthly'
 import People from './screens/People'
 import Share from './screens/Share'
 import Settings from './screens/Settings'
+import Setup from './screens/Setup'
 import SyncStatusBar from './SyncStatusBar'
-import { listenForUpdates, applyUpdate, dismissUpdate, onUpdateStateChange } from './updater'
-import { tryCloudRestore, runAutoBackup } from './db'
-import { initSyncListeners } from './syncQueue'
+import { listenForUpdates, applyUpdate, dismissUpdate, onUpdateStateChange, checkForUpdate } from './updater'
+import { tryCloudRestore, runAutoBackup, mergeFromTurso, migrateIdsToTimestamp, getUserId } from './db'
+import { initSyncListeners, processQueue } from './syncQueue'
 import { initFirebase } from './firebase'
 
 const TABS = [
@@ -27,47 +28,67 @@ export default function App() {
   const [updating, setUpdating] = useState(false)
   const [showUpdateModal, setShowUpdateModal] = useState(false)
 
-  // Initialize Firebase, sync, and attempt cloud restore (in order)
+  // User setup state
+  const [userId, setUserId] = useState(null)
+  const [checkingUser, setCheckingUser] = useState(true)
+
+  // Check if user has set up their Khata ID
   useEffect(() => {
+    const checkUser = async () => {
+      const id = await getUserId()
+      setUserId(id)
+      setCheckingUser(false)
+    }
+    checkUser()
+  }, [])
+
+  // Initialize after user is set up
+  useEffect(() => {
+    if (!userId) return
+
     const init = async () => {
       initFirebase()
       initSyncListeners()
 
-      // Small delay to let Firebase init settle
-      await new Promise((r) => setTimeout(r, 500))
+      await migrateIdsToTimestamp()
+      await processQueue()
 
       const restored = await tryCloudRestore()
       if (restored) {
         setScreenKey((k) => k + 1)
       }
 
-      // Run auto-backup after init
       runAutoBackup()
     }
     init()
-  }, [])
 
-  // Listen for service worker update events & check for OTA update on launch
+    // Live sync every 2 minutes
+    const liveSyncInterval = setInterval(async () => {
+      if (!navigator.onLine) return
+      try {
+        const changed = await mergeFromTurso()
+        if (changed) setScreenKey((k) => k + 1)
+      } catch {}
+    }, 2 * 60 * 1000)
+
+    return () => clearInterval(liveSyncInterval)
+  }, [userId])
+
+  // Listen for SW update messages
   useEffect(() => {
-    listenForUpdates((update) => {
-      if (update.state === 'ready' || update.state === 'downloading') {
+    const handleUpdate = (update) => {
+      if (update.state === 'ready') {
         setUpdateReady(true)
         setUpdateInfo(update.info)
         setShowUpdateModal(true)
       }
-    })
+    }
 
-    const unsub = onUpdateStateChange((update) => {
-      if (update.state === 'ready' || update.state === 'downloading') {
-        setUpdateReady(true)
-        setUpdateInfo(update.info)
-        setShowUpdateModal(true)
-      }
-    })
+    listenForUpdates(handleUpdate)
+    const unsub = onUpdateStateChange(handleUpdate)
 
-    // Check for OTA updates automatically on launch
     const autoCheck = async () => {
-      await new Promise((r) => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 3000))
       const update = await checkForUpdate()
       if (update) {
         setUpdateReady(true)
@@ -79,6 +100,10 @@ export default function App() {
 
     return unsub
   }, [])
+
+  const handleSetupComplete = (id) => {
+    setUserId(id)
+  }
 
   const handleUpdate = () => {
     setUpdating(true)
@@ -121,13 +146,20 @@ export default function App() {
     }
   }
 
+  // Show loading while checking user
+  if (checkingUser) return null
+
+  // Show setup screen if no user ID
+  if (!userId) {
+    return <Setup onComplete={handleSetupComplete} />
+  }
+
   return (
     <div className="app-shell">
       <div className="app-header">
         <h1>Khata</h1>
       </div>
 
-      {/* Sync Status Bar (Settings tab only) */}
       {tab === 'settings' && <SyncStatusBar />}
 
       {/* Update Modal */}

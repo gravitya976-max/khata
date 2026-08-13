@@ -1,7 +1,7 @@
 // db.js — IndexedDB wrapper for Khata
 // Local-first: all reads/writes go to IndexedDB (zero network needed)
-// Sync: writes are queued and pushed to Turso when online
-// Backup: Firebase receives periodic full backup (last-resort only)
+// Sync: writes are queued and pushed to Turso when online (per user)
+// Backup: Firebase receives periodic full backup (per user)
 
 import { enqueue, tryTursoRestore } from './syncQueue'
 import { pushFullBackup, restoreFromCloud } from './firebase'
@@ -11,7 +11,26 @@ const DB_VERSION = 2
 
 let dbInstance = null
 
-function openDB() {
+// ──── User ID management ────
+// Each user has a unique Khata ID that namespaces their data in Turso & Firebase.
+// Stored locally in IndexedDB settings. Same ID across devices = shared data.
+
+let cachedUserId = null
+
+export async function getUserId() {
+  if (cachedUserId) return cachedUserId
+  const id = await getSetting('khata_user_id', null)
+  cachedUserId = id
+  return id
+}
+
+export async function setUserIdValue(id) {
+  cachedUserId = id
+  return setSetting('khata_user_id', id)
+}
+
+// Exported so syncQueue.js can share the same DB connection
+export function openDB() {
   if (dbInstance) return Promise.resolve(dbInstance)
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
@@ -87,9 +106,9 @@ export async function getAllPeople() {
 export async function addPerson(name, mobile = '') {
   const people = await getAllPeople()
   const order = people.length
-  const id = await put('people', { name, mobile, order, createdAt: Date.now() })
+  const newPerson = { id: Date.now(), name, mobile, order, createdAt: Date.now() }
+  const id = await put('people', newPerson)
 
-  // Queue sync to Turso (background, non-blocking)
   const allPeople = await getAllPeople()
   enqueue('syncPeople', { people: allPeople })
   scheduleFirebaseBackup()
@@ -100,7 +119,6 @@ export async function addPerson(name, mobile = '') {
 export async function updatePerson(person) {
   const result = await put('people', person)
 
-  // Queue sync to Turso
   const allPeople = await getAllPeople()
   enqueue('syncPeople', { people: allPeople })
   scheduleFirebaseBackup()
@@ -109,7 +127,6 @@ export async function updatePerson(person) {
 }
 
 export async function deletePerson(id) {
-  // Also delete all collections for this person
   const db = await openDB()
   const tx = db.transaction(['people', 'collections'], 'readwrite')
   const peopleStore = tx.objectStore('people')
@@ -131,7 +148,6 @@ export async function deletePerson(id) {
     tx.onerror = () => reject(tx.error)
   })
 
-  // Queue sync to Turso
   enqueue('deletePerson', { id })
   scheduleFirebaseBackup()
 
@@ -209,8 +225,32 @@ export async function saveCollection(personId, date, amount) {
     tx.onerror = () => reject(tx.error)
   })
 
-  // Queue sync to Turso
   enqueue('syncCollection', { personId, date, amount })
+  scheduleFirebaseBackup()
+
+  return result
+}
+
+// Delete a single collection entry (for clearing wrong amounts)
+export async function deleteCollection(personId, date) {
+  const db = await openDB()
+  const result = await new Promise((resolve, reject) => {
+    const tx = db.transaction('collections', 'readwrite')
+    const store = tx.objectStore('collections')
+    const idx = store.index('personDate')
+    const req = idx.get([personId, date])
+
+    req.onsuccess = () => {
+      const existing = req.result
+      if (existing) {
+        store.delete(existing.id)
+      }
+    }
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+
+  enqueue('deleteCollection', { personId, date })
   scheduleFirebaseBackup()
 
   return result
@@ -242,22 +282,16 @@ export async function importAllData(data) {
     const cStore = tx.objectStore('collections')
     const sStore = tx.objectStore('settings')
 
-    // Clear existing
     pStore.clear()
     cStore.clear()
     sStore.clear()
 
-    // Import
-    ;(data.people || []).forEach((p) => pStore.add(p))
-    ;(data.collections || []).forEach((c) => cStore.add(c))
-    ;(data.settings || []).forEach((s) => sStore.add(s))
+    ;(data.people || []).forEach((p) => pStore.put(p))
+    ;(data.collections || []).forEach((c) => cStore.put(c))
+    ;(data.settings || []).forEach((s) => sStore.put(s))
 
     tx.oncomplete = () => {
-      dbInstance = null // Reset connection
-
-      // Queue full sync to Turso
       enqueue('fullSync', { people: data.people || [], collections: data.collections || [] })
-
       resolve()
     }
     tx.onerror = () => reject(tx.error)
@@ -272,7 +306,6 @@ export async function clearAllData() {
     tx.objectStore('collections').clear()
     tx.objectStore('settings').clear()
     tx.oncomplete = () => {
-      // Queue clear to Turso
       enqueue('clearAll', {})
       resolve()
     }
@@ -280,74 +313,187 @@ export async function clearAllData() {
   })
 }
 
-// Cloud recovery — tries Turso first, then Firebase
-export async function tryCloudRestore() {
-  const people = await getAll('people')
-  if (people.length > 0) return false // Local data exists, no need to restore
+// ── One-time migration: reassign sequential IDs → timestamps ──
+export async function migrateIdsToTimestamp() {
+  const done = await getSetting('ids_migrated_v1', false)
+  if (done) return
 
-  // Try Turso first (primary cloud)
-  const tursoData = await tryTursoRestore()
-  if (tursoData && tursoData.people && tursoData.people.length > 0) {
+  const db = await openDB()
+  const people = await getAllPeople()
+  const sequential = people.filter((p) => p.id < 1_000_000_000_000)
+  if (sequential.length === 0) {
+    await setSetting('ids_migrated_v1', true)
+    return
+  }
+
+  const base = Date.now()
+  const randomBytes = new Uint16Array(sequential.length)
+  crypto.getRandomValues(randomBytes)
+  const idMap = {}
+  sequential.forEach((p, i) => {
+    idMap[p.id] = base + (i * 1000) + randomBytes[i]
+  })
+
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(['people', 'collections'], 'readwrite')
+    const pStore = tx.objectStore('people')
+    const cStore = tx.objectStore('collections')
+
+    for (const p of sequential) {
+      pStore.delete(p.id)
+      pStore.put({ ...p, id: idMap[p.id] })
+    }
+
+    const req = cStore.getAll()
+    req.onsuccess = () => {
+      for (const c of req.result) {
+        if (idMap[c.personId]) {
+          cStore.delete(c.id)
+          cStore.put({ ...c, personId: idMap[c.personId] })
+        }
+      }
+    }
+
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+
+  await setSetting('ids_migrated_v1', true)
+}
+
+// Cloud sync — smart bidirectional (per user)
+export async function tryCloudRestore() {
+  const userId = await getUserId()
+  if (!userId) return false
+
+  const tursoData = await tryTursoRestore(userId)
+  const localPeople = await getAll('people')
+  const localHasData = localPeople.length > 0
+
+  if (!tursoData) {
+    if (localHasData) return false
+    try {
+      const firebaseData = await restoreFromCloud(userId)
+      if (firebaseData?.people?.length > 0) {
+        await importAllData(firebaseData)
+        return true
+      }
+    } catch (err) {
+      console.warn('Firebase restore failed:', err.message)
+    }
+    return false
+  }
+
+  const tursoHasData = tursoData.people.length > 0
+
+  if (tursoHasData && !localHasData) {
     await importAllData(tursoData)
     return true
   }
 
-  // Fallback to Firebase (backup)
-  const firebaseData = await restoreFromCloud()
-  if (firebaseData && firebaseData.people && firebaseData.people.length > 0) {
-    await importAllData(firebaseData)
+  if (tursoHasData && localHasData) {
+    await mergeFromTurso()
+    const localCollections = await getAll('collections')
+    enqueue('fullSync', { people: localPeople, collections: localCollections })
     return true
+  }
+
+  if (!tursoHasData && localHasData) {
+    enqueue('fullSync', { people: localPeople, collections: await getAll('collections') })
+    return false
   }
 
   return false
 }
 
-// ──── Auto-Backup ────
-// Local snapshot to IndexedDB every 1h, Firebase push after every change (debounced)
+// Merge latest Turso data into local WITHOUT clearing
+export async function mergeFromTurso() {
+  const userId = await getUserId()
+  if (!userId) return false
+
+  const tursoData = await tryTursoRestore(userId)
+  if (!tursoData) return false
+
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(['people', 'collections'], 'readwrite')
+    const pStore = tx.objectStore('people')
+    const cStore = tx.objectStore('collections')
+    const personDateIdx = cStore.index('personDate')
+
+    for (const p of (tursoData.people || [])) {
+      pStore.put({ id: p.id, name: p.name, mobile: p.mobile || '', order: p.order || 0, createdAt: p.createdAt || Date.now() })
+    }
+
+    let pending = 0
+    let completed = 0
+
+    for (const c of (tursoData.collections || [])) {
+      pending++
+      const lookupReq = personDateIdx.get([c.personId, c.date])
+      lookupReq.onsuccess = () => {
+        const existing = lookupReq.result
+        if (existing) {
+          if (!existing.timestamp || (c.timestamp && c.timestamp >= existing.timestamp)) {
+            existing.amount = c.amount
+            existing.timestamp = c.timestamp || Date.now()
+            cStore.put(existing)
+          }
+        } else {
+          cStore.add({ personId: c.personId, date: c.date, amount: c.amount, timestamp: c.timestamp || Date.now() })
+        }
+        completed++
+      }
+    }
+
+    tx.oncomplete = () => resolve(true)
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+// ──── Auto-Backup (per user) ────
 
 const BACKUP_KEY = 'auto_backups'
-const BACKUP_INTERVAL = 60 * 60 * 1000 // 1 hour (local snapshots)
+const BACKUP_INTERVAL = 60 * 60 * 1000
 const MAX_BACKUPS = 3
 
-// Debounced Firebase push — fires 10s after last data change
 let firebasePushTimer = null
 export function scheduleFirebaseBackup() {
   if (firebasePushTimer) clearTimeout(firebasePushTimer)
   firebasePushTimer = setTimeout(async () => {
     try {
+      const userId = await getUserId()
       const data = await exportAllData()
-      pushFullBackup(data)
+      pushFullBackup(data, userId || 'default')
       console.log('Firebase backup pushed (debounced)')
     } catch (err) {
       console.warn('Firebase debounced backup failed:', err.message)
     }
-  }, 10000) // 10 second debounce
+  }, 10000)
 }
 
 export async function runAutoBackup() {
   try {
     const lastRun = await getSetting('auto_backup_last_run', 0)
     const now = Date.now()
-    if (now - lastRun < BACKUP_INTERVAL) return false // Too soon
+    if (now - lastRun < BACKUP_INTERVAL) return false
 
+    const userId = await getUserId()
     const data = await exportAllData()
     const existing = await getSetting(BACKUP_KEY, [])
 
-    // Add new backup
     existing.unshift({
       data,
       createdAt: new Date().toISOString(),
       timestamp: now,
     })
 
-    // Keep only last MAX_BACKUPS
     while (existing.length > MAX_BACKUPS) existing.pop()
 
     await setSetting(BACKUP_KEY, existing)
     await setSetting('auto_backup_last_run', now)
 
-    // Also push to Firebase as backup (non-blocking)
-    pushFullBackup(data)
+    pushFullBackup(data, userId || 'default')
 
     return true
   } catch (err) {

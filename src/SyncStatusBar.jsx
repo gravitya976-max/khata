@@ -65,7 +65,7 @@ export default function SyncStatusBar() {
       return () => clearTimeout(timer)
     }
     setHideBar(false)
-  }, [status])
+  }, [status, isOnline])
 
   // Determine display state
   let icon, label, colorClass

@@ -67,13 +67,17 @@ export default function Monthly({ initialPersonId }) {
   const loadSummary = useCallback(async () => {
     const allC = await getCollectionsByMonth(year, month)
     const daysInMonth = getDaysInMonth(year, month)
+    const now = new Date()
+    const isCurrentMonth = year === now.getFullYear() && month === now.getMonth()
+    // Only count up to today for current month, full month for past months
+    const countableDays = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth
     const summary = people.map((p) => {
       const personEntries = allC.filter((c) => c.personId === p.id)
       const collected = personEntries.filter((c) => c.amount > 0).length
       return {
         person: p,
         collected,
-        skipped: daysInMonth - collected,
+        skipped: Math.max(0, countableDays - collected),
       }
     })
     setAllSummary(summary)
@@ -103,7 +107,7 @@ export default function Monthly({ initialPersonId }) {
   }
 
   // Determine cell class based on past/future + paid/due
-  const getCellClass = (day, _dayOfWeekIdx) => {
+  const getCellClass = (day) => {
     if (day === null) return 'empty'
 
     const dateStr = formatDateStr(day)

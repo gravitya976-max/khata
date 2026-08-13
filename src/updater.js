@@ -1,84 +1,19 @@
-// OTA Update for Khata
-// Downloads updated JS/CSS bundle into local IndexedDB and executes in-place.
-// Offline-first: works 100% offline once downloaded. No website URL redirects.
+// updater.js — UI-only update notifications for Khata
+// All actual update logic lives in sw.js (independent of app code).
+// This module only provides UI hooks to display update prompts.
 
-const LOCAL_VERSION = '1.2.0'
+const LOCAL_VERSION = '1.3.0'
 const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
-const BASE_HOSTED_URL = 'https://gravitya976-max.github.io/khata/'
 
-// Update state machine: idle → checking → downloading → ready → installing
+// Update state for UI
 let updateState = 'idle'
 let updateInfo = null
 let stateListeners = []
 
-// ──── IndexedDB OTA Storage ────
-
-function openOtaDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('khata_ota_cache', 1)
-    req.onupgradeneeded = (e) => {
-      const db = e.target.result
-      if (!db.objectStoreNames.contains('bundle')) {
-        db.createObjectStore('bundle')
-      }
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-export async function storeOtaBundle(css, js, version) {
-  try {
-    const db = await openOtaDB()
-    const tx = db.transaction('bundle', 'readwrite')
-    tx.objectStore('bundle').put({ css, js, version, time: Date.now() }, 'current')
-    await new Promise((res) => { tx.oncomplete = res })
-  } catch (err) {
-    console.warn('Failed to store OTA bundle:', err)
-  }
-}
-
-export async function getOtaBundle() {
-  try {
-    const db = await openOtaDB()
-    const tx = db.transaction('bundle', 'readonly')
-    const req = tx.objectStore('bundle').get('current')
-    return new Promise((resolve) => {
-      req.onsuccess = () => resolve(req.result || null)
-      req.onerror = () => resolve(null)
-    })
-  } catch {
-    return null
-  }
-}
-
-export async function clearOtaBundle() {
-  try {
-    const db = await openOtaDB()
-    const tx = db.transaction('bundle', 'readwrite')
-    tx.objectStore('bundle').delete('current')
-  } catch {}
-}
-
 // ──── State getters & helpers ────
 
 export function getLocalVersion() {
-  return localStorage.getItem('ota_version') || LOCAL_VERSION
-}
-
-export function isOTAActive() {
-  return localStorage.getItem('ota_active') === 'true'
-}
-
-export async function resetOTA() {
-  localStorage.removeItem('ota_active')
-  localStorage.removeItem('ota_version')
-  await clearOtaBundle()
-  window.location.reload()
-}
-
-export function getUpdateState() {
-  return { state: updateState, info: updateInfo }
+  return LOCAL_VERSION
 }
 
 export function onUpdateStateChange(callback) {
@@ -94,12 +29,11 @@ function setState(state, info = null) {
   stateListeners.forEach((cb) => cb({ state: updateState, info: updateInfo }))
 }
 
-// ──── Check for updates & download bundle ────
+// ──── Check for updates (UI-only — just reads version.json) ────
 
 export async function checkForUpdate() {
   if (!navigator.onLine) return null
 
-  const currentVer = getLocalVersion()
   setState('checking')
   try {
     const res = await fetch(VERSION_CHECK_URL, { cache: 'no-store' })
@@ -109,39 +43,17 @@ export async function checkForUpdate() {
     }
     const remote = await res.json()
 
-    if (remote.version && remote.version !== currentVer && isNewer(remote.version, currentVer)) {
-      // Background download of remote bundle
-      try {
-        const htmlRes = await fetch(BASE_HOSTED_URL + 'index.html', { cache: 'no-store' })
-        const htmlText = await htmlRes.text()
-
-        const cssMatch = htmlText.match(/href="([^"]+\.css)"/)
-        const jsMatch = htmlText.match(/src="([^"]+\.js)"/)
-
-        if (cssMatch && jsMatch) {
-          const cssUrl = new URL(cssMatch[1], BASE_HOSTED_URL).href
-          const jsUrl = new URL(jsMatch[1], BASE_HOSTED_URL).href
-
-          const [cssRes, jsRes] = await Promise.all([
-            fetch(cssUrl, { cache: 'no-store' }),
-            fetch(jsUrl, { cache: 'no-store' })
-          ])
-
-          if (cssRes.ok && jsRes.ok) {
-            const cssText = await cssRes.text()
-            const jsText = await jsRes.text()
-            await storeOtaBundle(cssText, jsText, remote.version)
-          }
-        }
-      } catch (e) {
-        console.warn('Bundle download failed:', e)
-      }
-
-      setState('downloading', {
+    if (remote.version && remote.version !== LOCAL_VERSION && isNewer(remote.version, LOCAL_VERSION)) {
+      setState('ready', {
         version: remote.version,
         changelog: remote.changelog || 'Bug fixes and improvements',
-        timestamp: remote.timestamp,
       })
+
+      // Ask SW to check and download the update
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'CHECK_UPDATE' })
+      }
+
       return remote
     }
 
@@ -164,43 +76,51 @@ function isNewer(remote, local) {
   return false
 }
 
+// ──── Listen for SW update messages ────
+
 export function listenForUpdates(callback) {
   if (!('serviceWorker' in navigator)) return
 
   navigator.serviceWorker.addEventListener('message', (event) => {
-    if (event.data && event.data.type === 'SW_UPDATED') {
-      setState('ready', updateInfo || { version: 'new', changelog: 'App updated in background' })
-      callback({ state: 'ready', info: updateInfo || { version: 'new', changelog: 'App updated in background' } })
+    if (event.data) {
+      if (event.data.type === 'SW_UPDATE_READY') {
+        const info = {
+          version: event.data.version || 'new',
+          changelog: event.data.changelog || 'Bug fixes and improvements',
+        }
+        setState('ready', info)
+        callback({ state: 'ready', info })
+      }
+      if (event.data.type === 'SW_ACTIVATED') {
+        // New SW version is active — no action needed, just informational
+        console.log('[Updater] SW activated version:', event.data.version)
+      }
     }
   })
 }
 
-// ──── Apply update ────
+// ──── Apply update: Tell SW to activate and reload ────
 
-export async function applyUpdate() {
+export function applyUpdate() {
   setState('installing')
 
-  if (updateInfo && updateInfo.version) {
-    localStorage.setItem('ota_version', updateInfo.version)
+  // Tell waiting SW to activate
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then((registration) => {
+      if (registration.waiting) {
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' })
+      }
+    })
   }
-  localStorage.setItem('ota_active', 'true')
 
+  // Reload after a brief delay to let SW activate
   setTimeout(() => {
     window.location.reload()
-  }, 300)
+  }, 500)
 }
 
 // ──── Dismiss update ────
 
-let dismissedVersion = null
-
 export function dismissUpdate() {
-  if (updateInfo) {
-    dismissedVersion = updateInfo.version
-  }
   setState('idle')
-}
-
-export function isDismissed() {
-  return updateInfo && updateInfo.version === dismissedVersion
 }

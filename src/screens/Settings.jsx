@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { exportAllData, importAllData, clearAllData, getAutoBackups, restoreFromAutoBackup, runAutoBackup } from '../db'
+import { exportAllData, importAllData, clearAllData, getAutoBackups, restoreFromAutoBackup, runAutoBackup, getUserId } from '../db'
 import { getFirebaseStatus } from '../firebase'
 import { getSyncStatus } from '../syncQueue'
-import { getLocalVersion, checkForUpdate, isOTAActive, resetOTA } from '../updater'
+import { getLocalVersion, checkForUpdate } from '../updater'
 
 export default function Settings() {
   const [toast, setToast] = useState('')
@@ -13,6 +13,7 @@ export default function Settings() {
   const [fbStatus, setFbStatus] = useState(getFirebaseStatus())
   const [isOnline, setIsOnline] = useState(navigator.onLine)
   const [checkingUpdate, setCheckingUpdate] = useState(false)
+  const [khataId, setKhataId] = useState('')
 
   // Real-time network detection (fetch-based for Android WebView reliability)
   useEffect(() => {
@@ -49,9 +50,11 @@ export default function Settings() {
   }, [])
 
   // Periodic sync/firebase status refresh
-  const refreshStatus = useCallback(() => {
+  const refreshStatus = useCallback(async () => {
     setSyncStatus(getSyncStatus())
     setFbStatus(getFirebaseStatus())
+    const id = await getUserId()
+    if (id) setKhataId(id)
   }, [])
 
   useEffect(() => {
@@ -168,6 +171,11 @@ export default function Settings() {
           <span className="settings-label">Version</span>
           <span className="settings-value">{getLocalVersion()}</span>
         </div>
+        <div className="settings-item">
+          <i className="fa-solid fa-user-tag" style={{ color: 'var(--primary)' }}></i>
+          <span className="settings-label">Khata ID</span>
+          <span className="settings-value" style={{ fontWeight: 700, color: 'var(--primary-dark)' }}>{khataId || '...'}</span>
+        </div>
         <div className="settings-item" onClick={handleCheckUpdate} style={{ cursor: 'pointer' }}>
           <i className="fa-solid fa-cloud-arrow-down" style={{ color: 'var(--primary)' }}></i>
           <span className="settings-label" style={{ fontWeight: 600 }}>Check for Updates</span>
@@ -188,13 +196,7 @@ export default function Settings() {
             {isOnline ? 'Online' : 'Offline'}
           </span>
         </div>
-        {isOTAActive() && (
-          <div className="settings-item" onClick={resetOTA} style={{ cursor: 'pointer' }}>
-            <i className="fa-solid fa-rotate-left" style={{ color: 'var(--danger)' }}></i>
-            <span className="settings-label" style={{ color: 'var(--danger)', fontWeight: 600 }}>Reset to Factory Version</span>
-            <i className="fa-solid fa-chevron-right" style={{ fontSize: 12, color: 'var(--text-muted)' }}></i>
-          </div>
-        )}
+
       </div>
 
       {/* Cloud Databases */}
