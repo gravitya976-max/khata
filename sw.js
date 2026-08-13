@@ -6,7 +6,7 @@
 // 3. Download and cache new versions
 // 4. Self-heal broken updates by replacing with newer versions
 
-const APP_VERSION = '1.3.0'
+const APP_VERSION = '1.3.1'
 const CACHE_PREFIX = 'khata-v'
 const CACHE_NAME = CACHE_PREFIX + APP_VERSION
 const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
@@ -27,7 +27,7 @@ const EXTERNAL_ASSETS = [
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2',
 ]
 
-// ──── Install: Cache core assets ────
+// ──── Install: Cache core assets + force activate ────
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
@@ -38,7 +38,9 @@ self.addEventListener('install', (e) => {
       }
     })
   )
-  // Don't skip waiting automatically — let the app or update logic control this
+  // Force activate immediately — critical for replacing the old eval-based SW
+  // Without this, the old app code would never send SKIP_WAITING
+  self.skipWaiting()
 })
 
 // ──── Message handler ────
