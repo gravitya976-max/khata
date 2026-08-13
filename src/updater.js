@@ -2,7 +2,7 @@
 // All actual update logic lives in sw.js (independent of app code).
 // This module only provides UI hooks to display update prompts.
 
-const LOCAL_VERSION = '1.3.0'
+const LOCAL_VERSION = '1.3.1'
 const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
 
 // Update state for UI
