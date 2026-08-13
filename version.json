@@ -1,5 +1,5 @@
 {
-  "version": "1.2.5",
-  "timestamp": "2026-08-08T15:55:00Z",
-  "changelog": "Whole Month Share updated to 2-column layout with unbroken vertical line"
+  "version": "1.3.0",
+  "timestamp": "2026-08-13T06:00:00Z",
+  "changelog": "Amount deletion, cloud sync fix, independent SW update engine, codebase fixes"
 }
