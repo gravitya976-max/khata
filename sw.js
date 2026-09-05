@@ -6,7 +6,7 @@
 // 3. Download and cache new versions
 // 4. Self-heal broken updates by replacing with newer versions
 
-const APP_VERSION = '1.3.1'
+const APP_VERSION = '1.4.0'
 const CACHE_PREFIX = 'khata-v'
 const CACHE_NAME = CACHE_PREFIX + APP_VERSION
 const VERSION_CHECK_URL = 'https://gravitya976-max.github.io/khata/version.json'
@@ -21,11 +21,8 @@ const CORE_ASSETS = [
   '/index.html',
 ]
 
-// External CDN assets for offline use
-const EXTERNAL_ASSETS = [
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/webfonts/fa-solid-900.woff2',
-]
+// No external CDN assets — fonts & icons are bundled locally via npm
+const EXTERNAL_ASSETS = []
 
 // ──── Install: Cache core assets + force activate ────
 self.addEventListener('install', (e) => {
@@ -189,7 +186,7 @@ async function checkForUpdateAndCache() {
       }
     }
 
-    // Also cache external assets in the new cache
+    // External assets (none — fonts bundled locally)
     for (const url of EXTERNAL_ASSETS) {
       try {
         const extRes = await fetch(url, { cache: 'no-store' })
