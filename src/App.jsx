@@ -42,36 +42,88 @@ export default function App() {
     checkUser()
   }, [])
 
-  // Initialize after user is set up
+  // One-time local setup after user is set up
+  // Only touches IndexedDB (local, instant) — zero network calls
   useEffect(() => {
     if (!userId) return
 
-    const init = async () => {
-      initFirebase()
-      initSyncListeners()
-
+    const localInit = async () => {
+      // One-time local migration (checks a flag, skips if already done)
       await migrateIdsToTimestamp()
-      await processQueue()
 
+      // Only restore from cloud if this is a fresh install (empty local DB)
       const restored = await tryCloudRestore()
       if (restored) {
         setScreenKey((k) => k + 1)
       }
-
-      runAutoBackup()
     }
-    init()
+    localInit()
+  }, [userId])
 
-    // Live sync every 2 minutes
-    const liveSyncInterval = setInterval(async () => {
-      if (!navigator.onLine) return
+  // Background sync — only runs when app is NOT in active use
+  // Triggers: app minimized, app closing, or user idle for 5s
+  useEffect(() => {
+    if (!userId) return
+
+    let idleTimer = null
+    let isSyncing = false
+
+    // The actual sync work — runs in background only
+    const runBackgroundSync = async () => {
+      if (isSyncing || !navigator.onLine) return
+      isSyncing = true
+
       try {
-        const changed = await mergeFromTurso()
-        if (changed) setScreenKey((k) => k + 1)
+        initFirebase()
+        initSyncListeners()
+        await processQueue()
+        await mergeFromTurso()
+        await runAutoBackup()
       } catch {}
-    }, 2 * 60 * 1000)
 
-    return () => clearInterval(liveSyncInterval)
+      isSyncing = false
+    }
+
+    // Trigger 1: App minimized (user switched to another app)
+    const onVisibilityChange = () => {
+      if (document.hidden) {
+        runBackgroundSync()
+      } else {
+        // App came back to foreground — refresh data
+        setScreenKey((k) => k + 1)
+      }
+    }
+
+    // Trigger 2: App closing (swipe kill, navigate away)
+    const onPageHide = () => {
+      runBackgroundSync()
+    }
+
+    // Trigger 3: User idle for 5s — quietly sync if there are pending writes
+    const resetIdleTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => {
+        if (navigator.onLine) runBackgroundSync()
+      }, 5000)
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+
+    // Track user activity to detect idle
+    document.addEventListener('pointerdown', resetIdleTimer, { passive: true })
+    document.addEventListener('scroll', resetIdleTimer, { passive: true })
+
+    // Initial idle timer — sync 5s after app opens if user hasn't interacted
+    resetIdleTimer()
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', onPageHide)
+      document.removeEventListener('pointerdown', resetIdleTimer)
+      document.removeEventListener('scroll', resetIdleTimer)
+      if (idleTimer) clearTimeout(idleTimer)
+    }
   }, [userId])
 
   // Listen for SW update messages

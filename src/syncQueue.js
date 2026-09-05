@@ -70,7 +70,7 @@ export async function enqueue(action, payload) {
     })
     tx.oncomplete = () => {
       updatePendingCount()
-      if (navigator.onLine) processQueue()
+      // Don't process queue here — it runs on background sync (minimize/close/idle)
       resolve()
     }
     tx.onerror = () => reject(tx.error)
@@ -270,7 +270,6 @@ export async function tryTursoRestore(userId) {
 export function initSyncListeners() {
   window.addEventListener('online', () => {
     updateStatus({ isOnline: true })
-    setTimeout(() => processQueue(), 1000)
   })
 
   window.addEventListener('offline', () => {
@@ -279,17 +278,6 @@ export function initSyncListeners() {
 
   updateStatus({ isOnline: navigator.onLine })
   updatePendingCount()
-
-  if (navigator.onLine) {
-    setTimeout(() => processQueue(), 2000)
-  }
-
-  setInterval(() => {
-    if (navigator.onLine) {
-      processQueue()
-      cleanupDoneItems()
-    }
-  }, 60000)
 
   // Load last sync time for this user
   if (isTursoConfigured() && navigator.onLine) {

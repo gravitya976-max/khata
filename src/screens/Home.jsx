@@ -190,7 +190,7 @@ export default function Home({ onViewPerson }) {
                     <button
                       key={h}
                       className="hotkey-btn"
-                      onMouseDown={(e) => {
+                      onPointerDown={(e) => {
                         e.preventDefault() // prevent blur before click fires
                         handleHotkey(person.id, h)
                       }}

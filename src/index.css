@@ -1,5 +1,5 @@
 /* Khata — Global Styles & Design Tokens */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800;900&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+/* Fonts loaded via <link> in index.html with display=swap for non-blocking */
 
 :root {
   --primary: #2ECC71;
@@ -34,6 +34,14 @@
   padding: 0;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Remove 300ms tap delay on all interactive elements */
+a, button, input, select, textarea, [role="button"], .person-card, .settings-item,
+.share-cal-cell, .person-dropdown-item, .hotkey-btn, .nav-item, .date-nav-btn,
+.share-btn, .share-month-btn, .date-detail-person, .chevron-btn, .clear-amount-btn,
+.add-btn, .date-nav-today, .person-select, .date-detail-close, .date-detail-share-btn {
+  touch-action: manipulation;
 }
 
 html,
@@ -144,6 +152,8 @@ input[inputmode="numeric"] {
   /* Firefox */
   -ms-overflow-style: none;
   /* IE/Edge */
+  will-change: scroll-position;
+  transform: translateZ(0);
 }
 
 .screen-container::-webkit-scrollbar {
@@ -151,9 +161,9 @@ input[inputmode="numeric"] {
   /* Chrome/Safari */
 }
 
-/* Screen transitions */
+/* Screen transitions — keep short for low-end devices */
 .screen-enter {
-  animation: screenIn 0.2s ease-out;
+  animation: screenIn 0.15s ease-out;
 }
 
 @keyframes screenIn {
@@ -263,7 +273,7 @@ input[inputmode="numeric"] {
   align-items: center;
   justify-content: center;
   box-shadow: var(--shadow-sm);
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s, transform 0.15s;
   flex-shrink: 0;
 }
 
@@ -334,7 +344,7 @@ input[inputmode="numeric"] {
   display: flex;
   align-items: center;
   gap: 10px;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
 .person-card:active {
@@ -467,7 +477,7 @@ input[inputmode="numeric"] {
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s, transform 0.15s;
 }
 
 .hotkey-btn:active {
@@ -572,7 +582,7 @@ input[inputmode="numeric"] {
   display: flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.15s;
+  transition: background-color 0.15s, transform 0.15s;
 }
 
 .add-btn:active {
@@ -710,7 +720,7 @@ input[inputmode="numeric"] {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition: background-color 0.15s, transform 0.1s;
 }
 
 .btn-primary:active {
@@ -728,7 +738,7 @@ input[inputmode="numeric"] {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color 0.15s;
 }
 
 .btn-secondary:active {
@@ -816,7 +826,7 @@ input[inputmode="numeric"] {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, padding-left 0.15s;
   color: var(--text-primary);
 }
 
@@ -824,7 +834,6 @@ input[inputmode="numeric"] {
   border-bottom: 1px solid #FBCFE8;
 }
 
-.person-dropdown-item:hover,
 .person-dropdown-item:active {
   background: rgba(249, 168, 212, 0.2);
   padding-left: 18px;
@@ -993,7 +1002,7 @@ input[inputmode="numeric"] {
   color: var(--text-secondary);
   cursor: pointer;
   text-transform: uppercase;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .share-toggle button.active {
@@ -1048,7 +1057,7 @@ input[inputmode="numeric"] {
   color: var(--text-primary);
   cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
-  transition: background 0.15s;
+  transition: background-color 0.15s;
 }
 
 .person-dropdown-item:last-child {
@@ -1171,7 +1180,7 @@ input[inputmode="numeric"] {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.15s;
+  transition: background-color 0.15s, transform 0.15s;
 }
 
 .share-btn:active {
@@ -1261,7 +1270,7 @@ input[inputmode="numeric"] {
   gap: 4px;
   min-height: 56px;
   cursor: pointer;
-  transition: transform 0.1s, box-shadow 0.1s;
+  transition: transform 0.1s;
 }
 
 .share-cal-cell:active {
@@ -1467,7 +1476,7 @@ input[inputmode="numeric"] {
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, transform 0.15s;
 }
 
 .date-detail-share-btn:active {
@@ -1564,7 +1573,7 @@ input[inputmode="numeric"] {
   border-radius: var(--radius-sm);
   margin-bottom: 4px;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background-color 0.15s;
 }
 
 .settings-item:active {
@@ -1698,7 +1707,7 @@ input[inputmode="numeric"] {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
   border-bottom: 1px solid #F0F0F0;
 }
 
